@@ -32,6 +32,12 @@ message Hyperparams {
 
     // Use tf.nn.relu6
     RELU_6 = 2;
+
+    // Use tf.nn.leaky_relu
+    LEAKY_RELU = 3;
+
+    // Use tf.nn.crelu
+    CRELU = 4;
   }
   optional Activation activation = 4 [default = RELU];
 

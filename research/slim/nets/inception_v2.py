@@ -36,7 +36,7 @@ def inception_v2_base(inputs,
   """Inception v2 (6a2).
 
   Constructs an Inception v2 network from inputs to the given final endpoint.
-  This method can construct the network up to the layer inception(5b) as
+  This http://arxiv.org/abs/1502.03167method can construct the network up to the layer inception(5b) as
   described in http://arxiv.org/abs/1502.03167.
 
   Args:
@@ -112,7 +112,7 @@ def inception_v2_base(inputs,
             inputs, depth(64), [7, 7],
             depth_multiplier=depthwise_multiplier,
             stride=2,
-            padding='SAME',
+            padding='VALID',
             weights_initializer=trunc_normal(1.0),
             scope=end_point)
       else:
@@ -121,13 +121,14 @@ def inception_v2_base(inputs,
             inputs,
             depth(64), [7, 7],
             stride=2,
+            padding='VALID',
             weights_initializer=trunc_normal(1.0),
             scope=end_point)
       end_points[end_point] = net
       if end_point == final_endpoint: return net, end_points
       # 112 x 112 x 64
       end_point = 'MaxPool_2a_3x3'
-      net = slim.max_pool2d(net, [3, 3], scope=end_point, stride=2)
+      net = slim.max_pool2d(net, [3, 3], scope=end_point, stride=2, padding='VALID')
       end_points[end_point] = net
       if end_point == final_endpoint: return net, end_points
       # 56 x 56 x 64
@@ -143,7 +144,7 @@ def inception_v2_base(inputs,
       if end_point == final_endpoint: return net, end_points
       # 56 x 56 x 192
       end_point = 'MaxPool_3a_3x3'
-      net = slim.max_pool2d(net, [3, 3], scope=end_point, stride=2)
+      net = slim.max_pool2d(net, [3, 3], scope=end_point, stride=2, padding='VALID')
       end_points[end_point] = net
       if end_point == final_endpoint: return net, end_points
       # 28 x 28 x 192
@@ -217,7 +218,7 @@ def inception_v2_base(inputs,
               net, depth(128), [1, 1],
               weights_initializer=trunc_normal(0.09),
               scope='Conv2d_0a_1x1')
-          branch_0 = slim.conv2d(branch_0, depth(160), [3, 3], stride=2,
+          branch_0 = slim.conv2d(branch_0, depth(160), [3, 3], stride=2, padding='VALID',
                                  scope='Conv2d_1a_3x3')
         with tf.variable_scope('Branch_1'):
           branch_1 = slim.conv2d(
@@ -227,10 +228,10 @@ def inception_v2_base(inputs,
           branch_1 = slim.conv2d(
               branch_1, depth(96), [3, 3], scope='Conv2d_0b_3x3')
           branch_1 = slim.conv2d(
-              branch_1, depth(96), [3, 3], stride=2, scope='Conv2d_1a_3x3')
+              branch_1, depth(96), [3, 3], stride=2, padding='VALID', scope='Conv2d_1a_3x3')
         with tf.variable_scope('Branch_2'):
           branch_2 = slim.max_pool2d(
-              net, [3, 3], stride=2, scope='MaxPool_1a_3x3')
+              net, [3, 3], stride=2, padding='VALID', scope='MaxPool_1a_3x3')
         net = tf.concat(axis=concat_dim, values=[branch_0, branch_1, branch_2])
         end_points[end_point] = net
         if end_point == final_endpoint: return net, end_points
@@ -366,7 +367,7 @@ def inception_v2_base(inputs,
               net, depth(128), [1, 1],
               weights_initializer=trunc_normal(0.09),
               scope='Conv2d_0a_1x1')
-          branch_0 = slim.conv2d(branch_0, depth(192), [3, 3], stride=2,
+          branch_0 = slim.conv2d(branch_0, depth(192), [3, 3], stride=2, padding='VALID',
                                  scope='Conv2d_1a_3x3')
         with tf.variable_scope('Branch_1'):
           branch_1 = slim.conv2d(
@@ -375,10 +376,10 @@ def inception_v2_base(inputs,
               scope='Conv2d_0a_1x1')
           branch_1 = slim.conv2d(branch_1, depth(256), [3, 3],
                                  scope='Conv2d_0b_3x3')
-          branch_1 = slim.conv2d(branch_1, depth(256), [3, 3], stride=2,
+          branch_1 = slim.conv2d(branch_1, depth(256), [3, 3], stride=2, padding='VALID',
                                  scope='Conv2d_1a_3x3')
         with tf.variable_scope('Branch_2'):
-          branch_2 = slim.max_pool2d(net, [3, 3], stride=2,
+          branch_2 = slim.max_pool2d(net, [3, 3], stride=2, padding='VALID',
                                      scope='MaxPool_1a_3x3')
         net = tf.concat(
             axis=concat_dim, values=[branch_0, branch_1, branch_2])
@@ -535,7 +536,7 @@ def inception_v2(inputs,
       end_points['Logits'] = logits
       end_points['Predictions'] = prediction_fn(logits, scope='Predictions')
   return logits, end_points
-inception_v2.default_image_size = 224
+inception_v2.default_image_size = 229
 
 
 def _reduced_kernel_size_for_small_input(input_tensor, kernel_size):
