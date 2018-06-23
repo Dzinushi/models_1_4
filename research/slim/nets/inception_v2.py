@@ -536,7 +536,7 @@ def inception_v2(inputs,
       end_points['Logits'] = logits
       end_points['Predictions'] = prediction_fn(logits, scope='Predictions')
   return logits, end_points
-inception_v2.default_image_size = 229
+inception_v2.default_image_size = 224
 
 
 def _reduced_kernel_size_for_small_input(input_tensor, kernel_size):
