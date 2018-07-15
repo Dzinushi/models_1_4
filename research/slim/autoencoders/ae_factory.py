@@ -1,27 +1,32 @@
-from tensorflow.contrib import slim
-from research.slim.autoencoders.lenet import lenet_bm
+from autoencoders.lenet import lenet_bm
+from autoencoders.mobilenet_v1 import mobilenet_v1_bm
+from autoencoders.alexnet import alexnet_bm
 import functools
 
-ae_map = {'lenet_bm': lenet_bm.lenet_bm}
+ae_map = {'lenet_bm': lenet_bm.lenet_bm,
+          'mobilenet_v1_bm': mobilenet_v1_bm.mobilenet_v1,
+          'alexnet_bm': alexnet_bm.alexnet_v2}
 
-ae_main_ls = {'lenet_bm': lenet_bm.get_main_ls}
+ae_loss_map = {'lenet_bm': lenet_bm.lenet_model_losses}
+               # 'mobilenet_v1_bm': mobilenet_v1_bm.get_loss_layer_names,
+               # 'alexnet_bm': alexnet_bm.get_loss_layer_names}
 
 
 def get_ae_fn(name):
-    if name not in ae_map[name]:
+    if name not in ae_map:
         raise ValueError('Name of network unknown %s' % name)
     func_ae = ae_map[name]
-    func_ae_main_ls = ae_main_ls[name]
+    func_ae_loss_layer_names = ae_loss_map[name]
 
     @functools.wraps(func_ae)
     def autoencoder_fn(images, **kwards):
         return func_ae(images, **kwards)
 
-    @functools.wraps(func_ae_main_ls)
-    def autoencoder_main_layer_scope():
-        return func_ae_main_ls()
+    @functools.wraps(func_ae_loss_layer_names)
+    def autoencoder_loss_map_fn(end_points, **kwards):
+        return func_ae_loss_layer_names(end_points, **kwards)
 
     if hasattr(func_ae, 'default_image_size'):
         autoencoder_fn.default_image_size = func_ae.default_image_size
 
-    return autoencoder_fn, autoencoder_main_layer_scope
+    return autoencoder_fn, autoencoder_loss_map_fn

@@ -25,6 +25,7 @@ from deployment import model_deploy
 from nets import nets_factory
 from preprocessing import preprocessing_factory
 from collections import defaultdict
+import os
 
 slim = tf.contrib.slim
 
@@ -196,6 +197,9 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_integer('max_number_of_steps', None,
                             'The maximum number of training steps.')
 
+tf.app.flags.DEFINE_integer('num_epoch', None,
+                            'The maximum number of training steps.')
+
 #####################
 # Fine-Tuning Flags #
 #####################
@@ -333,7 +337,7 @@ def _get_init_fn(variables_to_restore):
         for var in global_vars:
             if variables_to_restore[var._shared_name] is not None:
                 vars_load[var._shared_name] = variables_to_restore[var._shared_name]
-        tf.logging.info('Autoencoder pretrained variables successfully recovered')
+        tf.logging.info('\nAutoencoder pretrained variables successfully recovered')
         return slim.assign_from_values_fn(vars_load)
 
     if FLAGS.checkpoint_path is None:
@@ -394,35 +398,45 @@ def _get_variables_to_train():
     return variables_to_train
 
 
-def load_vars_from_path(model_path):
-    variables_to_restore = defaultdict(lambda: None)
-    sess_load = tf.Session()
-    with sess_load:
-        saver_load = tf.train.import_meta_graph(model_path + '.meta')
-        tf.logging.info(model_path + '.meta - OK')
-        saver_load.restore(sess_load, tf.train.latest_checkpoint('/'.join(model_path.split('/')[:-1])))
-        # saver_load.restore(sess_load, model_path)
-        vars_load = sess_load.graph.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
-        for var in vars_load:
-            variables_to_restore[var._shared_name] = var.eval()
-        tf.logging.info('Pretrained vars successfully loaded')
-    return variables_to_restore
+def load_vars_from_path(model_path, list_pretrained_vars):
+    with tf.Graph().as_default():
+        latest_checkpoint = tf.train.latest_checkpoint(model_path)
+        sess_load = tf.Session()
+        with sess_load:
+            saver_load = tf.train.import_meta_graph(latest_checkpoint + '.meta')
+            tf.logging.info('\n' + model_path + '.meta - OK')
+            # saver_load.restore(sess_load, tf.train.latest_checkpoint('/'.join(model_path.split('/')[:-1])))
+            saver_load.restore(sess_load, tf.train.latest_checkpoint(model_path))
+            vars_load = sess_load.graph.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+            for var in vars_load:
+                list_pretrained_vars[var._shared_name] = var.eval()
+            tf.logging.info('Pretrained vars from {} loaded'.format(model_path))
+        return list_pretrained_vars
+
+
+def load_vars_from_folder(folder_path):
+    list_trainable_blocks = os.listdir(folder_path)
+    list_pretrained_vars = defaultdict(lambda: None)
+    for trainable_block in list_trainable_blocks:
+        list_pretrained_vars = load_vars_from_path(model_path=folder_path + '/' + trainable_block,
+                                                   list_pretrained_vars=list_pretrained_vars)
+    return list_pretrained_vars
 
 
 def main(_):
     if not FLAGS.dataset_dir:
         raise ValueError('You must supply the dataset directory with --dataset_dir')
 
+    tf.logging.set_verbosity(tf.logging.INFO)
     variables_to_restore = defaultdict(lambda: None)
     if FLAGS.ae_path is not None:
-        variables_to_restore = load_vars_from_path(FLAGS.ae_path)
+        variables_to_restore = load_vars_from_folder(FLAGS.ae_path)
     # elif FLAGS.frozen_model_path is not None:
     #     variables_to_restore = load_vars_from_path(FLAGS.frozen_model_path)
 
-    tf.logging.set_verbosity(tf.logging.INFO)
     with tf.Graph().as_default():
         tf.set_random_seed(777)
-        tf.logging.info('Graph seed new: ', tf.get_default_graph().seed)
+        # tf.logging.info('Graph seed new: ', tf.get_default_graph().seed)
 
         #######################
         # Config model_deploy #
@@ -591,6 +605,11 @@ def main(_):
         # Merge all summaries together.
         summary_op = tf.summary.merge(list(summaries), name='summary_op')
 
+        if FLAGS.num_epoch is not None:
+            num_of_steps = int(FLAGS.num_epoch * dataset.num_samples / FLAGS.batch_size)
+        else:
+            num_of_steps = FLAGS.max_number_of_steps
+
         ###########################
         # Kicks off the training. #
         ###########################
@@ -601,7 +620,7 @@ def main(_):
             is_chief=(FLAGS.task == 0),
             init_fn=_get_init_fn(variables_to_restore),
             summary_op=summary_op,
-            number_of_steps=FLAGS.max_number_of_steps,
+            number_of_steps=num_of_steps,
             log_every_n_steps=FLAGS.log_every_n_steps,
             save_summaries_secs=FLAGS.save_summaries_secs,
             save_interval_secs=FLAGS.save_interval_secs,

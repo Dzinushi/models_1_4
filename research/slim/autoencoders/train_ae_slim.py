@@ -5,14 +5,10 @@ from preprocessing import inception_preprocessing
 from tensorflow.contrib import slim
 from datasets import dataset_factory
 from autoencoders.mobilenet_v1 import mobilenet_v1_bm
+from autoencoders import ae_factory
 
-# model_save_path = '/media/w_programs/Development/Python/tf_autoencoders/checkpoints/mobilenet_v1_mnist_rmsprop_1_epoch/'
-# dataset_dir = '/media/w_programs/NN_Database/data/cifar10'
-
-# dataset = cifar10
-# batch_size = 10  # Number of samples in each batch
-# epoch_num = 1  # Number of epochs to train the network
-# learning_rate = 0.001  # Learning rate
+tf.app.flags.DEFINE_string('ae_name', None,
+                           'Autoencoder model name (See slim/autoencoders/)')
 
 tf.app.flags.DEFINE_integer('max_number_of_steps', None,
                             'The maximum number of training steps.')
@@ -275,56 +271,48 @@ def main(_):
     with tf.Graph().as_default() as graph:
         tf.logging.set_verbosity(tf.logging.INFO)
 
+        sdc_num = 1
+
         ######################
         # Select the dataset #
         ######################
         dataset = dataset_factory.get_dataset(
             FLAGS.dataset_name, FLAGS.dataset_split_name, FLAGS.dataset_dir)
 
-        image_size = mobilenet_v1_bm.mobilenet_v1.default_image_size
+        # image_size = mobilenet_v1_bm.mobilenet_v1.default_image_size
+
+        ############################
+        # Select autoencoder model #
+        ############################
+        autoencoder_fn, autoencoder_loss_map_fn = ae_factory.get_ae_fn(FLAGS.ae_name)
+
+        image_size = autoencoder_fn.default_image_size
         images, labels = load_batch(dataset, FLAGS.batch_size, image_size, image_size, is_training=True)
 
         # calculate the number of batches per epoch
         batch_per_ep = dataset.num_samples // FLAGS.batch_size
 
         # Get model data
-        ae_outputs, end_points = mobilenet_v1_bm.mobilenet_v1(images, sdc_num=1, channel=3)
+        # ae_outputs, end_points = mobilenet_v1_bm.mobilenet_v1(images, sdc_num=1, channel=3)
+        ae_outputs, end_points = autoencoder_fn(images, sdc_num=sdc_num)
 
         # =================================================================================================
         # LOSS
         # =================================================================================================
-        loss_op = tf.reduce_mean(tf.square(end_points['input'] - end_points['Conv2d_0_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_0'] - end_points['Conv2d_1_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_1_depthwise'] - end_points['Conv2d_1_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_1_pointwise'] - end_points['Conv2d_2_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_2_depthwise'] - end_points['Conv2d_2_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_2_pointwise'] - end_points['Conv2d_3_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_3_depthwise'] - end_points['Conv2d_3_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_3_pointwise'] - end_points['Conv2d_4_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_4_depthwise'] - end_points['Conv2d_4_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_4_pointwise'] - end_points['Conv2d_5_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_5_depthwise'] - end_points['Conv2d_5_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_5_pointwise'] - end_points['Conv2d_6_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_6_depthwise'] - end_points['Conv2d_6_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_6_pointwise'] - end_points['Conv2d_7_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_7_depthwise'] - end_points['Conv2d_7_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_7_pointwise'] - end_points['Conv2d_8_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_8_depthwise'] - end_points['Conv2d_8_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_8_pointwise'] - end_points['Conv2d_9_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_9_depthwise'] - end_points['Conv2d_9_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_9_pointwise'] - end_points['Conv2d_10_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_10_depthwise'] - end_points['Conv2d_10_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_10_pointwise'] - end_points['Conv2d_11_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_11_depthwise'] - end_points['Conv2d_11_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_11_pointwise'] - end_points['Conv2d_12_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_12_depthwise'] - end_points['Conv2d_12_pointwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_12_pointwise'] - end_points['Conv2d_13_depthwise_dconv2d'])) + \
-               tf.reduce_mean(tf.square(end_points['Conv2d_13_depthwise'] - end_points['Conv2d_13_pointwise_dconv2d']))
-        optimizer = _configure_optimizer(FLAGS.learning_rate)
-        # optimizer = tf.train.RMSPropOptimizer(learning_rate=FLAGS.learning_rate, momentum=0.9)
-        train_op = slim.learning.create_train_op(loss_op, optimizer)
 
-        # init = init_fn()
+        loss_map = autoencoder_loss_map_fn(end_points, sdc_num=sdc_num)
+        loss_list = []
+
+        for index in range(len(loss_map)):
+            loss = tf.losses.mean_squared_error(labels=loss_map[index]['input'],
+                                                predictions=loss_map[index]['output'],
+                                                scope='Loss_' + str(index + 1))
+            loss_list.append(loss)
+
+        loss_op = tf.losses.get_total_loss()
+
+        optimizer = _configure_optimizer(FLAGS.learning_rate)
+        train_op = slim.learning.create_train_op(loss_op, optimizer)
 
         # Gather initial summaries.
         summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
@@ -343,6 +331,9 @@ def main(_):
         # Add summaries for variables.
         for variable in slim.get_model_variables():
             summaries.add(tf.summary.histogram(variable.op.name, variable))
+
+        # Add total_loss to summary.
+        summaries.add(tf.summary.scalar('total_loss', loss_op))
 
         # Merge all summaries together.
         summary_op = tf.summary.merge(list(summaries), name='summary_op')

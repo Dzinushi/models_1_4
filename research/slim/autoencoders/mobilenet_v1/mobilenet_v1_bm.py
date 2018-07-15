@@ -107,6 +107,7 @@ from __future__ import print_function
 
 from collections import namedtuple
 import functools
+from collections import defaultdict
 
 import tensorflow as tf
 
@@ -310,28 +311,17 @@ def mobilenet_v1_base(inputs,
 
 
 def mobilenet_v1(inputs,
-                 # num_classes=1000,
-                 # dropout_keep_prob=0.999,
-                 # is_training=True,
                  min_depth=8,
                  depth_multiplier=1.0,
                  conv_defs=None,
                  sdc_num=1,
                  channel=3,
-                 prediction_fn=tf.contrib.layers.softmax,
-                 spatial_squeeze=True,
                  reuse=None,
-                 scope='MobilenetV1',
-                 global_pool=False):
+                 scope='MobilenetV1'):
     """Mobilenet v1 model for classification.
 
     Args:
       inputs: a tensor of shape [batch_size, height, width, channels].
-      num_classes: number of predicted classes. If 0 or None, the logits layer
-        is omitted and the input features to the logits layer (before dropout)
-        are returned instead.
-      dropout_keep_prob: the percentage of activation values that are retained.
-      is_training: whether is training or not.
       min_depth: Minimum depth value (number of channels) for all convolution ops.
         Enforced when depth_multiplier < 1, and not an active constraint when
         depth_multiplier >= 1.
@@ -340,16 +330,7 @@ def mobilenet_v1(inputs,
         usage will be to set this value in (0, 1) to reduce the number of
         parameters or computation cost of the model.
       conv_defs: A list of ConvDef namedtuples specifying the net architecture.
-      prediction_fn: a function to get predictions out of logits.
-      spatial_squeeze: if True, logits is of shape is [B, C], if false logits is
-          of shape [B, 1, 1, C], where B is batch_size and C is number of classes.
-      reuse: whether or not the network and its variables should be reused. To be
-        able to reuse 'scope' must be given.
       scope: Optional variable_scope.
-      global_pool: Optional boolean flag to control the avgpooling before the
-        logits layer. If false or unset, pooling is done with a fixed window
-        that reduces default-sized inputs to 1x1, while larger inputs lead to
-        larger outputs. If true, any input size is pooled down to 1x1.
 
     Returns:
       net: a 2D Tensor with the logits (pre-softmax activations) if num_classes
@@ -374,17 +355,6 @@ def mobilenet_v1(inputs,
                                                 conv_defs=conv_defs,
                                                 channel=channel,
                                                 sdc_num=sdc_num)
-            # with tf.variable_scope('Logits'):
-            #     if global_pool:
-            #         # Global average pooling.
-            #         net = tf.reduce_mean(net, [1, 2], keep_dims=True, name='global_pool')
-            #         end_points['global_pool'] = net
-            #     else:
-            #         # Pooling with a fixed kernel size.
-            #         kernel_size = _reduced_kernel_size_for_small_input(net, [7, 7])
-            #         net = slim.avg_pool2d(net, kernel_size, padding='VALID',
-            #                               scope='AvgPool_1a')
-            #         end_points['AvgPool_1a'] = net
     return net, end_points
 
 
@@ -424,41 +394,39 @@ def _reduced_kernel_size_for_small_input(input_tensor, kernel_size):
     return kernel_size_out
 
 
-def mobilenet_v1_arg_scope(is_training=True,
-                           weight_decay=0.00004,
-                           stddev=0.09,
-                           regularize_depthwise=False):
-    """Defines the default MobilenetV1 arg scope.
+def get_loss_layer_names():
+    input = 'input'
+    output = 'output'
+    index = -1
+    next_index = lambda x: x + 1
+    
+    layer_names = defaultdict(lambda var: None)
+    layer_names[next_index(index)] = {input: 'input', output: 'Conv2d_0_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_0', output: 'Conv2d_1_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_1_depthwise', output: 'Conv2d_1_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_1_pointwise', output: 'Conv2d_2_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_2_depthwise', output: 'Conv2d_2_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_2_pointwise', output: 'Conv2d_3_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_3_depthwise', output: 'Conv2d_3_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_3_pointwise', output: 'Conv2d_4_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_4_depthwise', output: 'Conv2d_4_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_4_pointwise', output: 'Conv2d_5_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_5_depthwise', output: 'Conv2d_5_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_5_pointwise', output: 'Conv2d_6_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_6_depthwise', output: 'Conv2d_6_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_6_pointwise', output: 'Conv2d_7_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_7_depthwise', output: 'Conv2d_7_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_7_pointwise', output: 'Conv2d_8_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_8_depthwise', output: 'Conv2d_8_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_8_pointwise', output: 'Conv2d_9_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_9_depthwise', output: 'Conv2d_9_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_9_pointwise', output: 'Conv2d_10_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_10_depthwise', output: 'Conv2d_10_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_10_pointwise', output: 'Conv2d_11_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_11_depthwise', output: 'Conv2d_11_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_11_pointwise', output: 'Conv2d_12_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_12_depthwise', output: 'Conv2d_12_pointwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_12_pointwise', output: 'Conv2d_13_depthwise_dconv2d'}
+    layer_names[next_index(index)] = {input: 'Conv2d_13_depthwise', output: 'Conv2d_13_pointwise_dconv2d'}
 
-    Args:
-      is_training: Whether or not we're training the model.
-      weight_decay: The weight decay to use for regularizing the model.
-      stddev: The standard deviation of the trunctated normal weight initializer.
-      regularize_depthwise: Whether or not apply regularization on depthwise.
-
-    Returns:
-      An `arg_scope` to use for the mobilenet v1 model.
-    """
-    batch_norm_params = {
-        'is_training': is_training,
-        'center': True,
-        'scale': True,
-        'decay': 0.9997,
-        'epsilon': 0.001,
-    }
-
-    # Set weight_decay for weights in Conv and DepthSepConv layers.
-    weights_init = tf.truncated_normal_initializer(stddev=stddev)
-    regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
-    if regularize_depthwise:
-        depthwise_regularizer = regularizer
-    else:
-        depthwise_regularizer = None
-    with slim.arg_scope([slim.conv2d, slim.separable_conv2d],
-                        weights_initializer=weights_init,
-                        activation_fn=tf.nn.relu6, normalizer_fn=slim.batch_norm):
-        with slim.arg_scope([slim.batch_norm], **batch_norm_params):
-            with slim.arg_scope([slim.conv2d], weights_regularizer=regularizer):
-                with slim.arg_scope([slim.separable_conv2d],
-                                    weights_regularizer=depthwise_regularizer) as sc:
-                    return sc
+    return layer_names
