@@ -11,7 +11,7 @@ python3 /media/data/soft/enviroment/models_old/research/slim/autoencoders/train_
     --optimizer=rmsprop \
     --model_name=alexnet_v2 \
     --batch_size=1 \
-    --num_epoch=2 \
+    --num_epoch=1 \
     --save_summaries_secs=1 \
     --learning_rate=0.001
 python3 /media/data/soft/enviroment/models_old/research/slim/eval_image_classifier.py \

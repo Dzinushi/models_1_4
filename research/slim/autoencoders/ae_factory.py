@@ -4,12 +4,10 @@ from autoencoders.alexnet import alexnet_bm
 import functools
 
 ae_map = {'lenet_bm': lenet_bm.lenet_bm,
-          'mobilenet_v1_bm': mobilenet_v1_bm.mobilenet_v1,
           'alexnet_bm': alexnet_bm.alexnet_v2}
 
-ae_loss_map = {'lenet_bm': lenet_bm.lenet_model_losses}
-               # 'mobilenet_v1_bm': mobilenet_v1_bm.get_loss_layer_names,
-               # 'alexnet_bm': alexnet_bm.get_loss_layer_names}
+ae_loss_map = {'lenet_bm': lenet_bm.lenet_model_losses,
+               'alexnet_bm': alexnet_bm.alexnet_model_losses}
 
 
 def get_ae_fn(name):

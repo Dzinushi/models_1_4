@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 DATASET_DIR=/media/w_programs/NN_Database/data/flowers
 MODEL_NAME=lenet
-MODEL_DIR=/media/w_programs/Development/Python/tf_autoencoders/checkpoints/${MODEL_NAME}_ae_flowers_batch_1_new
+MODEL_DIR=/media/w_programs/Development/Python/tf_autoencoders/checkpoints/${MODEL_NAME}_ae_flowers_batch_1
 TRAIN_DIR=${MODEL_DIR}/train_ae_classificator
 EVAL_DIR=${MODEL_DIR}/eval_ae_classificator
-AUTOENCODER_PATH=${MODEL_DIR}/train_ae/model.ckpt-16600
+AUTOENCODER_PATH=${MODEL_DIR}/train_ae
 python3 /media/data/soft/enviroment/models_old/research/slim/autoencoders/train_slim.py \
     --train_dir=${TRAIN_DIR} \
     --dataset_name=flowers \
@@ -13,7 +13,7 @@ python3 /media/data/soft/enviroment/models_old/research/slim/autoencoders/train_
     --optimizer=rmsprop \
     --model_name=${MODEL_NAME} \
     --batch_size=1 \
-    --num_epoch=6 \
+    --num_epoch=2 \
     --save_summaries_secs=10 \
     --learning_rate=0.0001 \
     --log_every_n_steps=100 \

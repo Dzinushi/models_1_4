@@ -4,8 +4,9 @@ import tensorflow as tf
 from preprocessing import inception_preprocessing
 from tensorflow.contrib import slim
 from datasets import dataset_factory
-from autoencoders.mobilenet_v1 import mobilenet_v1_bm
 from autoencoders import ae_factory
+from collections import defaultdict
+from time import time
 
 tf.app.flags.DEFINE_string('ae_name', None,
                            'Autoencoder model name (See slim/autoencoders/)')
@@ -217,141 +218,140 @@ def _configure_optimizer(learning_rate):
     return optimizer
 
 
-def init_fn():
-    """Returns a function run by the chief worker to warm-start the training.
+def init_fn(list_pretrained_vars):
+    global_vars = tf.get_default_graph().get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+    list_assign_op = []
+    for var in global_vars:
+        if list_pretrained_vars[var._shared_name] is not None:
+            # list_assign_op.append(tf.assign(var, list_pretrained_vars[var._shared_name]))
+            list_assign_op.append(var.assign(list_pretrained_vars[var._shared_name]))
+    return list_assign_op
 
-      Note that the init_fn is only run when initializing the model during the very
-      first global step.
 
-      Returns:
-        An init function run by the supervisor.
-      """
-
-    if FLAGS.checkpoint_path is None:
-        return None
-
-        # Warn the user if a checkpoint exists in the train_dir. Then we'll be
-        # ignoring the checkpoint anyway.
-    if tf.train.latest_checkpoint(FLAGS.train_dir):
-        tf.logging.info(
-            'Ignoring --checkpoint_path because a checkpoint already exists in %s'
-            % FLAGS.train_dir)
-        return None
-
-    exclusions = []
-    if FLAGS.checkpoint_exclude_scopes:
-        exclusions = [scope.strip()
-                      for scope in FLAGS.checkpoint_exclude_scopes.split(',')]
-
-    # TODO(sguada) variables.filter_variables()
-    variables_to_restore = []
-    for var in slim.get_model_variables():
-        excluded = False
-        for exclusion in exclusions:
-            if var.op.name.startswith(exclusion):
-                excluded = True
-                break
-        if not excluded:
-            variables_to_restore.append(var)
-
-    if tf.gfile.IsDirectory(FLAGS.checkpoint_path):
-        checkpoint_path = tf.train.latest_checkpoint(FLAGS.checkpoint_path)
-    else:
-        checkpoint_path = FLAGS.checkpoint_path
-
-    tf.logging.info('Fine-tuning from %s' % checkpoint_path)
-
-    return slim.assign_from_checkpoint_fn(
-        checkpoint_path,
-        variables_to_restore,
-        ignore_missing_vars=FLAGS.ignore_missing_vars)
+def load_vars_from_path(model_path):
+    with tf.Graph().as_default():
+        list_pretrained_vars = defaultdict(lambda: None)
+        sess_load = tf.Session()
+        with sess_load:
+            saver_load = tf.train.import_meta_graph(model_path + '.meta')
+            tf.logging.info('\n' + model_path + '.meta - OK')
+            saver_load.restore(sess_load, tf.train.latest_checkpoint('/'.join(model_path.split('/')[:-1])))
+            vars_load = sess_load.graph.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+            for var in vars_load:
+                list_pretrained_vars[var._shared_name] = var.eval()
+            tf.logging.info('Pretrained vars successfully loaded')
+        return list_pretrained_vars
 
 
 def main(_):
-    with tf.Graph().as_default() as graph:
-        tf.logging.set_verbosity(tf.logging.INFO)
+    logdir_fn = lambda block_number: FLAGS.train_dir + '/train_block_{}/'.format(block_number)
 
-        sdc_num = 1
+    sdc_num = 1
+    list_assign = None
+    ############################
+    # Select autoencoder model #
+    ############################
+    autoencoder_fn, autoencoder_loss_map_fn = ae_factory.get_ae_fn(FLAGS.ae_name)
+    block_count = autoencoder_fn.block_number
 
-        ######################
-        # Select the dataset #
-        ######################
-        dataset = dataset_factory.get_dataset(
-            FLAGS.dataset_name, FLAGS.dataset_split_name, FLAGS.dataset_dir)
+    for train_block_number in range(block_count):
+        with tf.Graph().as_default() as graph:
+            tf.logging.set_verbosity(tf.logging.INFO)
+            ######################
+            # Select the dataset #
+            ######################
+            dataset = dataset_factory.get_dataset(
+                FLAGS.dataset_name, FLAGS.dataset_split_name, FLAGS.dataset_dir)
 
-        # image_size = mobilenet_v1_bm.mobilenet_v1.default_image_size
+            image_size = autoencoder_fn.default_image_size
+            images, labels = load_batch(dataset, FLAGS.batch_size, image_size, image_size, is_training=True)
 
-        ############################
-        # Select autoencoder model #
-        ############################
-        autoencoder_fn, autoencoder_loss_map_fn = ae_factory.get_ae_fn(FLAGS.ae_name)
+            # calculate the number of batches per epoch
+            batch_per_ep = dataset.num_samples // FLAGS.batch_size
 
-        image_size = autoencoder_fn.default_image_size
-        images, labels = load_batch(dataset, FLAGS.batch_size, image_size, image_size, is_training=True)
+            # Get model data
+            ae_outputs, end_points = autoencoder_fn(images, train_block_num=train_block_number, sdc_num=sdc_num)
 
-        # calculate the number of batches per epoch
-        batch_per_ep = dataset.num_samples // FLAGS.batch_size
+            if train_block_number > 0:
+                checkpoint_path = tf.train.latest_checkpoint(logdir_fn(train_block_number - 1))
+                list_pretrained_vars = load_vars_from_path(checkpoint_path)
+                list_assign = init_fn(list_pretrained_vars)
 
-        # Get model data
-        # ae_outputs, end_points = mobilenet_v1_bm.mobilenet_v1(images, sdc_num=1, channel=3)
-        ae_outputs, end_points = autoencoder_fn(images, sdc_num=sdc_num)
+            # =================================================================================================
+            # LOSS
+            # =================================================================================================
+            loss_map = autoencoder_loss_map_fn(end_points, train_block_num=train_block_number, sdc_num=sdc_num)
+            loss_list = []
+            for loss in loss_map:
+                loss_list.append(tf.reduce_sum(tf.divide(tf.square(loss_map[loss]['input'] - loss_map[loss]['output']),
+                                                         tf.constant(2.0))))
+            loss_op = tf.reduce_mean(loss_list)
+            tf.losses.add_loss(loss_op)
+            # loss_op = tf.losses.get_total_loss()
 
-        # =================================================================================================
-        # LOSS
-        # =================================================================================================
+            optimizer = _configure_optimizer(FLAGS.learning_rate)
+            train_op = slim.learning.create_train_op(loss_op, optimizer)
 
-        loss_map = autoencoder_loss_map_fn(end_points, sdc_num=sdc_num)
-        loss_list = []
+            # Gather initial summaries.
+            summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
 
-        for index in range(len(loss_map)):
-            loss = tf.losses.mean_squared_error(labels=loss_map[index]['input'],
-                                                predictions=loss_map[index]['output'],
-                                                scope='Loss_' + str(index + 1))
-            loss_list.append(loss)
+            # Add summaries for end_points.
+            for end_point in end_points:
+                x = end_points[end_point]
+                summaries.add(tf.summary.histogram('activations/' + end_point, x))
+                summaries.add(tf.summary.scalar('sparsity/' + end_point,
+                                                tf.nn.zero_fraction(x)))
 
-        loss_op = tf.losses.get_total_loss()
+            # Add summaries for losses.
+            for loss in tf.get_collection(tf.GraphKeys.LOSSES):
+                summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
 
-        optimizer = _configure_optimizer(FLAGS.learning_rate)
-        train_op = slim.learning.create_train_op(loss_op, optimizer)
+            # Add summaries for variables.
+            for variable in slim.get_model_variables():
+                summaries.add(tf.summary.histogram(variable.op.name, variable))
 
-        # Gather initial summaries.
-        summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
+            # Add total_loss to summary.
+            summaries.add(tf.summary.scalar('total_loss', loss_op))
 
-        # Add summaries for end_points.
-        for end_point in end_points:
-            x = end_points[end_point]
-            summaries.add(tf.summary.histogram('activations/' + end_point, x))
-            summaries.add(tf.summary.scalar('sparsity/' + end_point,
-                                            tf.nn.zero_fraction(x)))
+            # Merge all summaries together.
+            summary_op = tf.summary.merge(list(summaries), name='summary_op')
 
-        # Add summaries for losses.
-        for loss in tf.get_collection(tf.GraphKeys.LOSSES):
-            summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
+            if FLAGS.num_epoch == -1:
+                number_of_steps = FLAGS.max_number_of_steps
+            else:
+                number_of_steps = batch_per_ep * FLAGS.num_epoch
 
-        # Add summaries for variables.
-        for variable in slim.get_model_variables():
-            summaries.add(tf.summary.histogram(variable.op.name, variable))
+        # Create session using Supervisor
+        sv = tf.train.Supervisor(logdir=logdir_fn(train_block_number),
+                                 save_model_secs=100000000,
+                                 summary_op=summary_op,
+                                 graph=graph)
 
-        # Add total_loss to summary.
-        summaries.add(tf.summary.scalar('total_loss', loss_op))
-
-        # Merge all summaries together.
-        summary_op = tf.summary.merge(list(summaries), name='summary_op')
-
-        if FLAGS.num_epoch == -1:
-            number_of_steps = FLAGS.max_number_of_steps
-        else:
-            number_of_steps = batch_per_ep * FLAGS.num_epoch
-
-        slim.learning.train(train_op,
-                            master=FLAGS.master,
-                            logdir=FLAGS.train_dir,
-                            number_of_steps=number_of_steps,
-                            init_fn=init_fn(),
-                            summary_op=summary_op,
-                            log_every_n_steps=FLAGS.log_every_n_steps,
-                            save_summaries_secs=FLAGS.save_summaries_secs,
-                            save_interval_secs=FLAGS.save_interval_secs)
+        with sv.managed_session() as sess:
+            # Initialize pretrained variables values
+            if list_assign is not None:
+                sess.run(list_assign)
+                tf.logging.info('Autoencoder pretrained variables successfully recovered!')
+            total_loss = 0.0
+            global_step = sess.run(sv.global_step)
+            i = 0
+            while global_step < number_of_steps:
+                time_start = time()
+                loss = sess.run(train_op)
+                time_end = time()
+                total_loss += loss
+                if (global_step + 1) % FLAGS.log_every_n_steps == 0:
+                    tf.logging.info(
+                        'Block: {}, Step: {}, loss: {:.5f}, total_loss: {:.5f} ({:.3f} sec/step)'.format(
+                            train_block_number,
+                            global_step + 1,
+                            loss,
+                            total_loss / (i + 1),
+                            time_end - time_start))
+                global_step += 1
+                i += 1
+            checkpoint_path = logdir_fn(train_block_number) + 'model.ckpt'
+            sv.saver.save(sess, save_path=checkpoint_path, global_step=number_of_steps)
 
 
 if __name__ == '__main__':

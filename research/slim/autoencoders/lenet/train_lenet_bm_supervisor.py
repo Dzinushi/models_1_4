@@ -1,21 +1,22 @@
 from __future__ import division, print_function, absolute_import
 
 import tensorflow as tf
-from research.slim.autoencoders.lenet import lenet_bm_linear
+from research.slim.autoencoders.lenet import lenet_bm
 from tensorflow.contrib import slim
 from collections import defaultdict
-from datasets import cifar10
+from datasets import flowers
 from time import time
 
 from preprocessing import inception_preprocessing
+from research.slim.autoencoders.optimizers.sgd_sdc_1 import GradientDescentOptimizerSDC1
 
-model_save_path = '/media/w_programs/Development/Python/tf_autoencoders/checkpoints/lenet_mnist_rmsprop_1_epoch/train_ae'
+model_save_path = '/media/w_programs/Development/Python/tf_autoencoders/checkpoints/lenet_flowers_sgd_sdc_1_epoch_1/train_ae'
 
 batch_size = 1  # Number of samples in each batch
 epoch_num = 1  # Number of epochs to train the network
 lr = 0.001  # Learning rate
 log_every_n_step = 100
-max_step = None
+max_step = 500
 
 
 def load_vars_from_path(model_path):
@@ -38,7 +39,6 @@ def init_fn(list_pretrained_vars):
     list_assign_op = []
     for var in global_vars:
         if list_pretrained_vars[var._shared_name] is not None:
-            # list_assign_op.append(tf.assign(var, list_pretrained_vars[var._shared_name]))
             list_assign_op.append(var.assign(list_pretrained_vars[var._shared_name]))
     return list_assign_op
 
@@ -67,7 +67,7 @@ def load_batch(dataset, batch_size, height=224, width=224, is_training=True):
 
 
 # Set autoencoder model
-ae_fn = lenet_bm_linear.lenet_bm
+ae_fn = lenet_bm.lenet_bm
 
 # Set image size
 image_size = ae_fn.default_image_size
@@ -83,8 +83,8 @@ for train_block_number in range(block_count):
 
         tf.logging.set_verbosity(tf.logging.INFO)
 
-        dataset = cifar10.get_split('train',
-                                    '/media/w_programs/NN_Database/data/cifar10/')
+        dataset = flowers.get_split('train',
+                                    '/media/w_programs/NN_Database/data/flowers/')
         if max_step is None:
             max_step = dataset.num_samples // batch_size
 
@@ -99,28 +99,16 @@ for train_block_number in range(block_count):
         # =================================================================================================
         # LOSS
         # =================================================================================================
-        if train_block_number == 0:
-            loss_map = {0: [{'input': end_points['input_sdc_0'],
-                             'output': end_points['input_sdc_1']},
-                            {'input': end_points['conv1_sdc_0'],
-                             'output': end_points['conv1_sdc_1']}]}
-        elif train_block_number == 1:
-            loss_map = {1: [{'input': end_points['pool1_sdc_0'],
-                             'output': end_points['pool1_sdc_1']},
-                            {'input': end_points['conv2_sdc_0'],
-                             'output': end_points['conv2_sdc_1']}]}
-        else:
-            loss_map = {2: [{'input': end_points['Flatten_sdc_0'],
-                             'output': end_points['Flatten_sdc_1']},
-                            {'input': end_points['fc3_sdc_0'],
-                             'output': end_points['fc3_sdc_1']}]}
+        loss_map = lenet_bm.lenet_model_losses(end_points, train_block_number, sdc_num=1)
         list_losses = []
         for loss in loss_map[train_block_number]:
-            list_losses.append(tf.reduce_sum(tf.divide(tf.square(loss['input'] - loss['output']),
+            list_losses.append(tf.reduce_sum(tf.divide(tf.square(loss_map[loss]['input'] - loss_map[loss]['output']),
                                                        tf.constant(2.0))))
         loss_op = tf.reduce_mean(list_losses)
 
-        optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, momentum=0.9)
+        # optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, momentum=0.9)
+        optimizer = GradientDescentOptimizerSDC1(learning_rate=lr, activation_name='relu', loss_map=loss_map)
+        # optimizer = tf.train.GradientDescentOptimizer(learning_rate=lr)
         train_op = slim.learning.create_train_op(loss_op, optimizer)
 
     # Create session using Supervisor

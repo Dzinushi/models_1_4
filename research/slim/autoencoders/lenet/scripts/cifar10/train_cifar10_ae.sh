@@ -8,7 +8,7 @@ python3 /media/data/soft/enviroment/models_old/research/slim/autoencoders/train_
     --dataset_dir=${DATASET_DIR} \
     --optimizer=rmsprop \
     --ae_name=lenet_bm \
-    --batch_size=10 \
+    --batch_size=1 \
     --num_epoch=1 \
     --save_summaries_secs=600 \
     --learning_rate=0.001
