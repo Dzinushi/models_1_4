@@ -112,6 +112,8 @@ def sdc_fully_connected_block(end_points,
 
 
 """Append '_sdc_N' or '_dconv2d_sdc_N' to layer_scope value to check (where N=(0, 1, 2 .. N)"""
+
+
 def set_model_losses(end_points, layers_scope, sdc_num=1):
     index = 0
     add_loss = lambda input_value, output_value: {'input': input_value, 'output': output_value}

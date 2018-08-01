@@ -5,18 +5,18 @@ from tensorflow.python.framework import graph_util
 
 dir = os.path.dirname(os.path.realpath(__file__))
 
+
 def freeze_graph(model_folder, output_nodes='y_hat',
                  output_filename='frozen-graph.pb',
                  rename_outputs=None):
-
-    #Load checkpoint
+    # Load checkpoint
     checkpoint = tf.train.get_checkpoint_state(model_folder)
     input_checkpoint = checkpoint.model_checkpoint_path
 
     output_graph = output_filename
 
-    #Devices should be cleared to allow Tensorflow to control placement of
-    #graph when loading on different machines
+    # Devices should be cleared to allow Tensorflow to control placement of
+    # graph when loading on different machines
     saver = tf.train.import_meta_graph(input_checkpoint + '.meta',
                                        clear_devices=True)
 
@@ -24,13 +24,13 @@ def freeze_graph(model_folder, output_nodes='y_hat',
 
     onames = output_nodes.split(',')
 
-    #https://stackoverflow.com/a/34399966/4190475
+    # https://stackoverflow.com/a/34399966/4190475
     if rename_outputs is not None:
         nnames = rename_outputs.split(',')
         with graph.as_default():
             for o, n in zip(onames, nnames):
-                _out = tf.identity(graph.get_tensor_by_name(o+':0'), name=n)
-            onames=nnames
+                _out = tf.identity(graph.get_tensor_by_name(o + ':0'), name=n)
+            onames = nnames
 
     input_graph_def = graph.as_graph_def()
 
@@ -52,7 +52,7 @@ def freeze_graph(model_folder, output_nodes='y_hat',
         # graph_util provides utility to change all variables to constants
         output_graph_def = graph_util.convert_variables_to_constants(
             sess, input_graph_def,
-            onames # unrelated nodes will be discarded
+            onames  # unrelated nodes will be discarded
         )
 
         # Serialize and write to file

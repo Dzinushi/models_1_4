@@ -24,9 +24,9 @@ import conditional_eval
 
 class ConditionalEvalTest(tf.test.TestCase):
 
-  def test_build_graph(self):
-    conditional_eval.main(None, run_eval_loop=False)
+    def test_build_graph(self):
+        conditional_eval.main(None, run_eval_loop=False)
 
 
 if __name__ == '__main__':
-  tf.test.main()
+    tf.test.main()

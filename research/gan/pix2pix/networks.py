@@ -25,28 +25,28 @@ from slim.nets import pix2pix
 
 
 def generator(input_images):
-  """Thin wrapper around CycleGAN generator to conform to the TFGAN API.
-
-  Args:
-    input_images: A batch of images to translate. Images should be normalized
-      already. Shape is [batch, height, width, channels].
-
-  Returns:
-    Returns generated image batch.
-  """
-  input_images.shape.assert_has_rank(4)
-  with tf.contrib.framework.arg_scope(cyclegan.cyclegan_arg_scope()):
-    output_images, _ = cyclegan.cyclegan_generator_resnet(input_images)
-  return output_images
+    """Thin wrapper around CycleGAN generator to conform to the TFGAN API.
+  
+    Args:
+      input_images: A batch of images to translate. Images should be normalized
+        already. Shape is [batch, height, width, channels].
+  
+    Returns:
+      Returns generated image batch.
+    """
+    input_images.shape.assert_has_rank(4)
+    with tf.contrib.framework.arg_scope(cyclegan.cyclegan_arg_scope()):
+        output_images, _ = cyclegan.cyclegan_generator_resnet(input_images)
+    return output_images
 
 
 def discriminator(image_batch, unused_conditioning=None):
-  """A thin wrapper around the Pix2Pix discriminator to conform to TFGAN API."""
-  with tf.contrib.framework.arg_scope(pix2pix.pix2pix_arg_scope()):
-    logits_4d, _ = pix2pix.pix2pix_discriminator(
-        image_batch, num_filters=[64, 128, 256, 512])
-    logits_4d.shape.assert_has_rank(4)
-  # Output of logits is 4D. Reshape to 2D, for TFGAN.
-  logits_2d = tf.contrib.layers.flatten(logits_4d)
+    """A thin wrapper around the Pix2Pix discriminator to conform to TFGAN API."""
+    with tf.contrib.framework.arg_scope(pix2pix.pix2pix_arg_scope()):
+        logits_4d, _ = pix2pix.pix2pix_discriminator(
+            image_batch, num_filters=[64, 128, 256, 512])
+        logits_4d.shape.assert_has_rank(4)
+    # Output of logits is 4D. Reshape to 2D, for TFGAN.
+    logits_2d = tf.contrib.layers.flatten(logits_4d)
 
-  return logits_2d
+    return logits_2d

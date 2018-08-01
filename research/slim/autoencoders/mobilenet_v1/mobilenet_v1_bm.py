@@ -266,7 +266,7 @@ def mobilenet_v1_base(inputs,
                                                                             normalizer_fn=slim.batch_norm,
                                                                             reuse=reuse,
                                                                             scope=end_point)
-                        end_points[end_point + deconv] = net_d = slim.conv2d_transpose(net, conv_defs[i-1].depth,
+                        end_points[end_point + deconv] = net_d = slim.conv2d_transpose(net, conv_defs[i - 1].depth,
                                                                                        conv_def.kernel,
                                                                                        stride=layer_stride,
                                                                                        normalizer_fn=slim.batch_norm,
@@ -290,7 +290,7 @@ def mobilenet_v1_base(inputs,
                                                                   reuse=reuse,
                                                                   scope=end_point)
                         end_points[end_point + deconv] = net_d = slim.conv2d_transpose(net,
-                                                                                       depth(conv_defs[i-1].depth),
+                                                                                       depth(conv_defs[i - 1].depth),
                                                                                        [1, 1],
                                                                                        stride=1,
                                                                                        normalizer_fn=slim.batch_norm,
@@ -399,7 +399,7 @@ def get_loss_layer_names():
     output = 'output'
     index = -1
     next_index = lambda x: x + 1
-    
+
     layer_names = defaultdict(lambda var: None)
     layer_names[next_index(index)] = {input: 'input', output: 'Conv2d_0_dconv2d'}
     layer_names[next_index(index)] = {input: 'Conv2d_0', output: 'Conv2d_1_depthwise_dconv2d'}

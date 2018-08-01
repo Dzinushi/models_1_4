@@ -39,7 +39,6 @@ x = tf.cast(batch, 'float32')
 
 # %% Create localisation network and convolutional layer
 with tf.variable_scope('spatial_transformer_0'):
-
     # %% Create a fully-connected layer with 6 output nodes
     n_fc = 6
     W_fc1 = tf.Variable(tf.zeros([1200 * 1600 * 3, n_fc]), name='W_fc1')

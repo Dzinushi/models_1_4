@@ -18,7 +18,6 @@ lr = 0.001  # Learning rate
 log_every_n_step = 100
 max_step = 1000
 
-
 tf.set_random_seed(777)
 
 

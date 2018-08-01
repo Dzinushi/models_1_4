@@ -66,6 +66,25 @@ def load_batch(dataset, batch_size, height=224, width=224, is_training=True):
     return images, labels
 
 
+activation_dic = {
+    'relu': 1.0,
+    'leaky_relu': 0.2
+}
+
+
+def derivative_activation(activation_name):
+    try:
+        return activation_dic[activation_name]
+    except KeyError as e:
+        # можно также присвоить значение по умолчанию вместо бросания исключения
+        raise ValueError('Undefined unit: {}'.format(e.args[0]))
+
+
+@tf.RegisterGradient('CustomGradient')
+def _derivative_grad(activation_name, grad):
+    return grad * derivative_activation(activation_name)
+
+
 # Set autoencoder model
 ae_fn = lenet_bm.lenet_bm
 
@@ -100,14 +119,14 @@ for train_block_number in range(block_count):
         # LOSS
         # =================================================================================================
         loss_map = lenet_bm.lenet_model_losses(end_points, train_block_number, sdc_num=1)
-        list_losses = []
-        for loss in loss_map[train_block_number]:
-            list_losses.append(tf.reduce_sum(tf.divide(tf.square(loss_map[loss]['input'] - loss_map[loss]['output']),
-                                                       tf.constant(2.0))))
-        loss_op = tf.reduce_mean(list_losses)
+        loss_list = []
+        for loss in loss_map:
+            loss_list.append(tf.reduce_sum(tf.divide(tf.square(loss_map[loss]['input'] - loss_map[loss]['output']),
+                                                     tf.constant(2.0))))
+        loss_op = tf.reduce_mean(loss_list)
 
         # optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, momentum=0.9)
-        optimizer = GradientDescentOptimizerSDC1(learning_rate=lr, activation_name='relu', loss_map=loss_map)
+        optimizer = GradientDescentOptimizerSDC1(learning_rate=lr, activation_name='relu')
         # optimizer = tf.train.GradientDescentOptimizer(learning_rate=lr)
         train_op = slim.learning.create_train_op(loss_op, optimizer)
 

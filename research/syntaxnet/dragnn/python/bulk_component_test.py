@@ -27,7 +27,6 @@ Verifies that:
 
 import os.path
 
-
 import tensorflow as tf
 
 from tensorflow.python.framework import test_util
@@ -46,55 +45,55 @@ FLAGS = tf.app.flags.FLAGS
 
 class MockNetworkUnit(object):
 
-  def get_layer_size(self, unused_layer_name):
-    return 64
+    def get_layer_size(self, unused_layer_name):
+        return 64
 
 
 class MockComponent(object):
 
-  def __init__(self):
-    self.name = 'mock'
-    self.network = MockNetworkUnit()
+    def __init__(self):
+        self.name = 'mock'
+        self.network = MockNetworkUnit()
 
 
 class MockMaster(object):
 
-  def __init__(self):
-    self.spec = spec_pb2.MasterSpec()
-    self.hyperparams = spec_pb2.GridPoint()
-    self.lookup_component = {'mock': MockComponent()}
+    def __init__(self):
+        self.spec = spec_pb2.MasterSpec()
+        self.hyperparams = spec_pb2.GridPoint()
+        self.lookup_component = {'mock': MockComponent()}
 
 
 def _create_fake_corpus():
-  """Returns a list of fake serialized sentences for tests."""
-  num_docs = 4
-  corpus = []
-  for num_tokens in range(1, num_docs + 1):
-    sentence = sentence_pb2.Sentence()
-    sentence.text = 'x' * num_tokens
-    for i in range(num_tokens):
-      token = sentence.token.add()
-      token.word = 'x'
-      token.start = i
-      token.end = i
-    corpus.append(sentence.SerializeToString())
-  return corpus
+    """Returns a list of fake serialized sentences for tests."""
+    num_docs = 4
+    corpus = []
+    for num_tokens in range(1, num_docs + 1):
+        sentence = sentence_pb2.Sentence()
+        sentence.text = 'x' * num_tokens
+        for i in range(num_tokens):
+            token = sentence.token.add()
+            token.word = 'x'
+            token.start = i
+            token.end = i
+        corpus.append(sentence.SerializeToString())
+    return corpus
 
 
 class BulkComponentTest(test_util.TensorFlowTestCase):
 
-  def setUp(self):
-    self.master = MockMaster()
-    self.master_state = component.MasterState(
-        handle='handle', current_batch_size=2)
-    self.network_states = {
-        'mock': component.NetworkState(),
-        'test': component.NetworkState(),
-    }
+    def setUp(self):
+        self.master = MockMaster()
+        self.master_state = component.MasterState(
+            handle='handle', current_batch_size=2)
+        self.network_states = {
+            'mock': component.NetworkState(),
+            'test': component.NetworkState(),
+        }
 
-  def testFailsOnNonIdentityTranslator(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testFailsOnNonIdentityTranslator(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "test"
         network_unit {
           registered_name: "IdentityNetwork"
@@ -106,27 +105,27 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
         }
         """, component_spec)
 
-    # For feature extraction:
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkFeatureExtractorComponentBuilder(
-          self.master, component_spec)
+        # For feature extraction:
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkFeatureExtractorComponentBuilder(
+                self.master, component_spec)
 
-      # Expect feature extraction to generate a error due to the "history"
-      # translator.
-      with self.assertRaises(NotImplementedError):
-        comp.build_greedy_training(self.master_state, self.network_states)
+            # Expect feature extraction to generate a error due to the "history"
+            # translator.
+            with self.assertRaises(NotImplementedError):
+                comp.build_greedy_training(self.master_state, self.network_states)
 
-    # As well as annotation:
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkAnnotatorComponentBuilder(
-          self.master, component_spec)
+        # As well as annotation:
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkAnnotatorComponentBuilder(
+                self.master, component_spec)
 
-      with self.assertRaises(NotImplementedError):
-        comp.build_greedy_training(self.master_state, self.network_states)
+            with self.assertRaises(NotImplementedError):
+                comp.build_greedy_training(self.master_state, self.network_states)
 
-  def testFailsOnRecurrentLinkedFeature(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testFailsOnRecurrentLinkedFeature(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "test"
         network_unit {
           registered_name: "FeedForwardNetwork"
@@ -142,27 +141,27 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
         }
         """, component_spec)
 
-    # For feature extraction:
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkFeatureExtractorComponentBuilder(
-          self.master, component_spec)
+        # For feature extraction:
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkFeatureExtractorComponentBuilder(
+                self.master, component_spec)
 
-      # Expect feature extraction to generate a error due to the "history"
-      # translator.
-      with self.assertRaises(RuntimeError):
-        comp.build_greedy_training(self.master_state, self.network_states)
+            # Expect feature extraction to generate a error due to the "history"
+            # translator.
+            with self.assertRaises(RuntimeError):
+                comp.build_greedy_training(self.master_state, self.network_states)
 
-    # As well as annotation:
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkAnnotatorComponentBuilder(
-          self.master, component_spec)
+        # As well as annotation:
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkAnnotatorComponentBuilder(
+                self.master, component_spec)
 
-      with self.assertRaises(RuntimeError):
-        comp.build_greedy_training(self.master_state, self.network_states)
+            with self.assertRaises(RuntimeError):
+                comp.build_greedy_training(self.master_state, self.network_states)
 
-  def testConstantFixedFeatureFailsIfNotPretrained(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testConstantFixedFeatureFailsIfNotPretrained(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "test"
         network_unit {
           registered_name: "IdentityNetwork"
@@ -175,25 +174,25 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
           registered_name: "bulk_component.BulkFeatureExtractorComponentBuilder"
         }
         """, component_spec)
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkFeatureExtractorComponentBuilder(
-          self.master, component_spec)
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkFeatureExtractorComponentBuilder(
+                self.master, component_spec)
 
-      with self.assertRaisesRegexp(ValueError,
-                                   'Constant embeddings must be pretrained'):
-        comp.build_greedy_training(self.master_state, self.network_states)
-      with self.assertRaisesRegexp(ValueError,
-                                   'Constant embeddings must be pretrained'):
-        comp.build_greedy_inference(
-            self.master_state, self.network_states, during_training=True)
-      with self.assertRaisesRegexp(ValueError,
-                                   'Constant embeddings must be pretrained'):
-        comp.build_greedy_inference(
-            self.master_state, self.network_states, during_training=False)
+            with self.assertRaisesRegexp(ValueError,
+                                         'Constant embeddings must be pretrained'):
+                comp.build_greedy_training(self.master_state, self.network_states)
+            with self.assertRaisesRegexp(ValueError,
+                                         'Constant embeddings must be pretrained'):
+                comp.build_greedy_inference(
+                    self.master_state, self.network_states, during_training=True)
+            with self.assertRaisesRegexp(ValueError,
+                                         'Constant embeddings must be pretrained'):
+                comp.build_greedy_inference(
+                    self.master_state, self.network_states, during_training=False)
 
-  def testNormalFixedFeaturesAreDifferentiable(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testNormalFixedFeaturesAreDifferentiable(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "test"
         network_unit {
           registered_name: "IdentityNetwork"
@@ -207,29 +206,29 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
           registered_name: "bulk_component.BulkFeatureExtractorComponentBuilder"
         }
         """, component_spec)
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkFeatureExtractorComponentBuilder(
-          self.master, component_spec)
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkFeatureExtractorComponentBuilder(
+                self.master, component_spec)
 
-      # Get embedding matrix variables.
-      with tf.variable_scope(comp.name, reuse=True):
-        fixed_embedding_matrix = tf.get_variable(
-            network_units.fixed_embeddings_name(0))
+            # Get embedding matrix variables.
+            with tf.variable_scope(comp.name, reuse=True):
+                fixed_embedding_matrix = tf.get_variable(
+                    network_units.fixed_embeddings_name(0))
 
-      # Get output layer.
-      comp.build_greedy_training(self.master_state, self.network_states)
-      activations = self.network_states[comp.name].activations
-      outputs = activations[comp.network.layers[0].name].bulk_tensor
+            # Get output layer.
+            comp.build_greedy_training(self.master_state, self.network_states)
+            activations = self.network_states[comp.name].activations
+            outputs = activations[comp.network.layers[0].name].bulk_tensor
 
-      # Compute the gradient of the output layer w.r.t. the embedding matrix.
-      # This should be well-defined for in the normal case.
-      gradients = tf.gradients(outputs, fixed_embedding_matrix)
-      self.assertEqual(len(gradients), 1)
-      self.assertFalse(gradients[0] is None)
+            # Compute the gradient of the output layer w.r.t. the embedding matrix.
+            # This should be well-defined for in the normal case.
+            gradients = tf.gradients(outputs, fixed_embedding_matrix)
+            self.assertEqual(len(gradients), 1)
+            self.assertFalse(gradients[0] is None)
 
-  def testConstantFixedFeaturesAreNotDifferentiableButOthersAre(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testConstantFixedFeaturesAreNotDifferentiableButOthersAre(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "test"
         network_unit {
           registered_name: "IdentityNetwork"
@@ -249,35 +248,35 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
           registered_name: "bulk_component.BulkFeatureExtractorComponentBuilder"
         }
         """, component_spec)
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkFeatureExtractorComponentBuilder(
-          self.master, component_spec)
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkFeatureExtractorComponentBuilder(
+                self.master, component_spec)
 
-      # Get embedding matrix variables.
-      with tf.variable_scope(comp.name, reuse=True):
-        constant_embedding_matrix = tf.get_variable(
-            network_units.fixed_embeddings_name(0))
-        trainable_embedding_matrix = tf.get_variable(
-            network_units.fixed_embeddings_name(1))
+            # Get embedding matrix variables.
+            with tf.variable_scope(comp.name, reuse=True):
+                constant_embedding_matrix = tf.get_variable(
+                    network_units.fixed_embeddings_name(0))
+                trainable_embedding_matrix = tf.get_variable(
+                    network_units.fixed_embeddings_name(1))
 
-      # Get output layer.
-      comp.build_greedy_training(self.master_state, self.network_states)
-      activations = self.network_states[comp.name].activations
-      outputs = activations[comp.network.layers[0].name].bulk_tensor
+            # Get output layer.
+            comp.build_greedy_training(self.master_state, self.network_states)
+            activations = self.network_states[comp.name].activations
+            outputs = activations[comp.network.layers[0].name].bulk_tensor
 
-      # The constant embeddings are non-differentiable.
-      constant_gradients = tf.gradients(outputs, constant_embedding_matrix)
-      self.assertEqual(len(constant_gradients), 1)
-      self.assertTrue(constant_gradients[0] is None)
+            # The constant embeddings are non-differentiable.
+            constant_gradients = tf.gradients(outputs, constant_embedding_matrix)
+            self.assertEqual(len(constant_gradients), 1)
+            self.assertTrue(constant_gradients[0] is None)
 
-      # The trainable embeddings are differentiable.
-      trainable_gradients = tf.gradients(outputs, trainable_embedding_matrix)
-      self.assertEqual(len(trainable_gradients), 1)
-      self.assertFalse(trainable_gradients[0] is None)
+            # The trainable embeddings are differentiable.
+            trainable_gradients = tf.gradients(outputs, trainable_embedding_matrix)
+            self.assertEqual(len(trainable_gradients), 1)
+            self.assertFalse(trainable_gradients[0] is None)
 
-  def testFailsOnFixedFeature(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testFailsOnFixedFeature(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "annotate"
         network_unit {
           registered_name: "IdentityNetwork"
@@ -286,18 +285,18 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
           name: "fixed" embedding_dim: 32 size: 1
         }
         """, component_spec)
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkAnnotatorComponentBuilder(
-          self.master, component_spec)
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkAnnotatorComponentBuilder(
+                self.master, component_spec)
 
-      # Expect feature extraction to generate a runtime error due to the
-      # fixed feature.
-      with self.assertRaises(RuntimeError):
-        comp.build_greedy_training(self.master_state, self.network_states)
+            # Expect feature extraction to generate a runtime error due to the
+            # fixed feature.
+            with self.assertRaises(RuntimeError):
+                comp.build_greedy_training(self.master_state, self.network_states)
 
-  def testBulkFeatureIdExtractorOkWithOneFixedFeature(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testBulkFeatureIdExtractorOkWithOneFixedFeature(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "test"
         network_unit {
           registered_name: "IdentityNetwork"
@@ -306,19 +305,19 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
           name: "fixed" embedding_dim: -1 size: 1
         }
         """, component_spec)
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkFeatureIdExtractorComponentBuilder(
-          self.master, component_spec)
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkFeatureIdExtractorComponentBuilder(
+                self.master, component_spec)
 
-      # Should not raise errors.
-      self.network_states[component_spec.name] = component.NetworkState()
-      comp.build_greedy_training(self.master_state, self.network_states)
-      self.network_states[component_spec.name] = component.NetworkState()
-      comp.build_greedy_inference(self.master_state, self.network_states)
+            # Should not raise errors.
+            self.network_states[component_spec.name] = component.NetworkState()
+            comp.build_greedy_training(self.master_state, self.network_states)
+            self.network_states[component_spec.name] = component.NetworkState()
+            comp.build_greedy_inference(self.master_state, self.network_states)
 
-  def testBulkFeatureIdExtractorFailsOnLinkedFeature(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testBulkFeatureIdExtractorFailsOnLinkedFeature(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "test"
         network_unit {
           registered_name: "IdentityNetwork"
@@ -332,14 +331,14 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
           source_component: "mock"
         }
         """, component_spec)
-    with tf.Graph().as_default():
-      with self.assertRaises(ValueError):
-        unused_comp = bulk_component.BulkFeatureIdExtractorComponentBuilder(
-            self.master, component_spec)
+        with tf.Graph().as_default():
+            with self.assertRaises(ValueError):
+                unused_comp = bulk_component.BulkFeatureIdExtractorComponentBuilder(
+                    self.master, component_spec)
 
-  def testBulkFeatureIdExtractorOkWithMultipleFixedFeatures(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testBulkFeatureIdExtractorOkWithMultipleFixedFeatures(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "test"
         network_unit {
           registered_name: "IdentityNetwork"
@@ -354,19 +353,19 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
           name: "fixed3" embedding_dim: -1 size: 1
         }
         """, component_spec)
-    with tf.Graph().as_default():
-      comp = bulk_component.BulkFeatureIdExtractorComponentBuilder(
-          self.master, component_spec)
+        with tf.Graph().as_default():
+            comp = bulk_component.BulkFeatureIdExtractorComponentBuilder(
+                self.master, component_spec)
 
-      # Should not raise errors.
-      self.network_states[component_spec.name] = component.NetworkState()
-      comp.build_greedy_training(self.master_state, self.network_states)
-      self.network_states[component_spec.name] = component.NetworkState()
-      comp.build_greedy_inference(self.master_state, self.network_states)
+            # Should not raise errors.
+            self.network_states[component_spec.name] = component.NetworkState()
+            comp.build_greedy_training(self.master_state, self.network_states)
+            self.network_states[component_spec.name] = component.NetworkState()
+            comp.build_greedy_inference(self.master_state, self.network_states)
 
-  def testBulkFeatureIdExtractorFailsOnEmbeddedFixedFeature(self):
-    component_spec = spec_pb2.ComponentSpec()
-    text_format.Parse("""
+    def testBulkFeatureIdExtractorFailsOnEmbeddedFixedFeature(self):
+        component_spec = spec_pb2.ComponentSpec()
+        text_format.Parse("""
         name: "test"
         network_unit {
           registered_name: "IdentityNetwork"
@@ -375,18 +374,18 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
           name: "fixed" embedding_dim: 2 size: 1
         }
         """, component_spec)
-    with tf.Graph().as_default():
-      with self.assertRaises(ValueError):
-        unused_comp = bulk_component.BulkFeatureIdExtractorComponentBuilder(
-            self.master, component_spec)
+        with tf.Graph().as_default():
+            with self.assertRaises(ValueError):
+                unused_comp = bulk_component.BulkFeatureIdExtractorComponentBuilder(
+                    self.master, component_spec)
 
-  def testBulkFeatureIdExtractorExtractFocusWithOffset(self):
-    path = os.path.join(tf.test.get_temp_dir(), 'label-map')
-    with open(path, 'w') as label_map_file:
-      label_map_file.write('0\n')
+    def testBulkFeatureIdExtractorExtractFocusWithOffset(self):
+        path = os.path.join(tf.test.get_temp_dir(), 'label-map')
+        with open(path, 'w') as label_map_file:
+            label_map_file.write('0\n')
 
-    master_spec = spec_pb2.MasterSpec()
-    text_format.Parse("""
+        master_spec = spec_pb2.MasterSpec()
+        text_format.Parse("""
         component {
           name: "test"
           transition_system {
@@ -420,67 +419,68 @@ class BulkComponentTest(test_util.TensorFlowTestCase):
         }
         """ % path, master_spec)
 
-    with tf.Graph().as_default():
-      corpus = _create_fake_corpus()
-      corpus = tf.constant(corpus, shape=[len(corpus)])
-      handle = dragnn_ops.get_session(
-          container='test',
-          master_spec=master_spec.SerializeToString(),
-          grid_point='')
-      handle = dragnn_ops.attach_data_reader(handle, corpus)
-      handle = dragnn_ops.init_component_data(
-          handle, beam_size=1, component='test')
-      batch_size = dragnn_ops.batch_size(handle, component='test')
-      master_state = component.MasterState(handle, batch_size)
+        with tf.Graph().as_default():
+            corpus = _create_fake_corpus()
+            corpus = tf.constant(corpus, shape=[len(corpus)])
+            handle = dragnn_ops.get_session(
+                container='test',
+                master_spec=master_spec.SerializeToString(),
+                grid_point='')
+            handle = dragnn_ops.attach_data_reader(handle, corpus)
+            handle = dragnn_ops.init_component_data(
+                handle, beam_size=1, component='test')
+            batch_size = dragnn_ops.batch_size(handle, component='test')
+            master_state = component.MasterState(handle, batch_size)
 
-      extractor = bulk_component.BulkFeatureIdExtractorComponentBuilder(
-          self.master, master_spec.component[0])
-      network_state = component.NetworkState()
-      self.network_states['test'] = network_state
-      handle = extractor.build_greedy_inference(master_state,
-                                                self.network_states)
-      focus1 = network_state.activations['focus1'].bulk_tensor
-      focus2 = network_state.activations['focus2'].bulk_tensor
-      focus3 = network_state.activations['focus3'].bulk_tensor
+            extractor = bulk_component.BulkFeatureIdExtractorComponentBuilder(
+                self.master, master_spec.component[0])
+            network_state = component.NetworkState()
+            self.network_states['test'] = network_state
+            handle = extractor.build_greedy_inference(master_state,
+                                                      self.network_states)
+            focus1 = network_state.activations['focus1'].bulk_tensor
+            focus2 = network_state.activations['focus2'].bulk_tensor
+            focus3 = network_state.activations['focus3'].bulk_tensor
 
-      with self.test_session() as sess:
-        focus1, focus2, focus3 = sess.run([focus1, focus2, focus3])
-        tf.logging.info('focus1=\n%s', focus1)
-        tf.logging.info('focus2=\n%s', focus2)
-        tf.logging.info('focus3=\n%s', focus3)
+            with self.test_session() as sess:
+                focus1, focus2, focus3 = sess.run([focus1, focus2, focus3])
+                tf.logging.info('focus1=\n%s', focus1)
+                tf.logging.info('focus2=\n%s', focus2)
+                tf.logging.info('focus3=\n%s', focus3)
 
-        self.assertAllEqual(
-            focus1,
-            [[0], [-1], [-1], [-1],
-             [0], [1], [-1], [-1],
-             [0], [1], [2], [-1],
-             [0], [1], [2], [3]])
+                self.assertAllEqual(
+                    focus1,
+                    [[0], [-1], [-1], [-1],
+                     [0], [1], [-1], [-1],
+                     [0], [1], [2], [-1],
+                     [0], [1], [2], [3]])
 
-        self.assertAllEqual(
-            focus2,
-            [[-1], [-1], [-1], [-1],
-             [1], [-1], [-1], [-1],
-             [1], [2], [-1], [-1],
-             [1], [2], [3], [-1]])
+                self.assertAllEqual(
+                    focus2,
+                    [[-1], [-1], [-1], [-1],
+                     [1], [-1], [-1], [-1],
+                     [1], [2], [-1], [-1],
+                     [1], [2], [3], [-1]])
 
-        self.assertAllEqual(
-            focus3,
-            [[-1], [-1], [-1], [-1],
-             [-1], [-1], [-1], [-1],
-             [2], [-1], [-1], [-1],
-             [2], [3], [-1], [-1]])
+                self.assertAllEqual(
+                    focus3,
+                    [[-1], [-1], [-1], [-1],
+                     [-1], [-1], [-1], [-1],
+                     [2], [-1], [-1], [-1],
+                     [2], [3], [-1], [-1]])
 
-  def testBuildLossFailsOnNoExamples(self):
-    with tf.Graph().as_default():
-      logits = tf.constant([[0.5], [-0.5], [0.5], [-0.5]])
-      gold = tf.constant([-1, -1, -1, -1])
-      result = bulk_component.build_cross_entropy_loss(logits, gold)
+    def testBuildLossFailsOnNoExamples(self):
+        with tf.Graph().as_default():
+            logits = tf.constant([[0.5], [-0.5], [0.5], [-0.5]])
+            gold = tf.constant([-1, -1, -1, -1])
+            result = bulk_component.build_cross_entropy_loss(logits, gold)
 
-      # Expect loss computation to generate a runtime error due to the gold
-      # tensor containing no valid examples.
-      with self.test_session() as sess:
-        with self.assertRaises(tf.errors.InvalidArgumentError):
-          sess.run(result)
+            # Expect loss computation to generate a runtime error due to the gold
+            # tensor containing no valid examples.
+            with self.test_session() as sess:
+                with self.assertRaises(tf.errors.InvalidArgumentError):
+                    sess.run(result)
+
 
 if __name__ == '__main__':
-  googletest.main()
+    googletest.main()

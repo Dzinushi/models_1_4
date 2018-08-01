@@ -226,7 +226,6 @@ tf.app.flags.DEFINE_string(
     'ae_path', None,
     'Path to autoencoder pretrained vars.')
 
-
 FLAGS = tf.app.flags.FLAGS
 
 

@@ -29,25 +29,25 @@ import data_provider
 
 class DataProviderTest(tf.test.TestCase):
 
-  def test_cifar10_train_set(self):
-    dataset_dir = os.path.join(
-        tf.flags.FLAGS.test_srcdir,
-        'google3/third_party/tensorflow_models/gan/cifar/testdata')
+    def test_cifar10_train_set(self):
+        dataset_dir = os.path.join(
+            tf.flags.FLAGS.test_srcdir,
+            'google3/third_party/tensorflow_models/gan/cifar/testdata')
 
-    batch_size = 4
-    images, labels, num_samples, num_classes = data_provider.provide_data(
-        batch_size, dataset_dir)
-    self.assertEqual(50000, num_samples)
-    self.assertEqual(10, num_classes)
-    with self.test_session(use_gpu=True) as sess:
-      with tf.contrib.slim.queues.QueueRunners(sess):
-        images_out, labels_out = sess.run([images, labels])
-        self.assertEqual(images_out.shape, (batch_size, 32, 32, 3))
-        expected_label_shape = (batch_size, 10)
-        self.assertEqual(expected_label_shape, labels_out.shape)
-        # Check range.
-        self.assertTrue(np.all(np.abs(images_out) <= 1))
+        batch_size = 4
+        images, labels, num_samples, num_classes = data_provider.provide_data(
+            batch_size, dataset_dir)
+        self.assertEqual(50000, num_samples)
+        self.assertEqual(10, num_classes)
+        with self.test_session(use_gpu=True) as sess:
+            with tf.contrib.slim.queues.QueueRunners(sess):
+                images_out, labels_out = sess.run([images, labels])
+                self.assertEqual(images_out.shape, (batch_size, 32, 32, 3))
+                expected_label_shape = (batch_size, 10)
+                self.assertEqual(expected_label_shape, labels_out.shape)
+                # Check range.
+                self.assertTrue(np.all(np.abs(images_out) <= 1))
 
 
 if __name__ == '__main__':
-  tf.test.main()
+    tf.test.main()

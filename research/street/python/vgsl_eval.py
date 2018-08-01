@@ -39,11 +39,11 @@ FLAGS = flags.FLAGS
 
 
 def main(argv):
-  del argv
-  vgsl_model.Eval(FLAGS.train_dir, FLAGS.eval_dir, FLAGS.model_str,
-                  FLAGS.eval_data, FLAGS.decoder, FLAGS.num_steps,
-                  FLAGS.graph_def_file, FLAGS.eval_interval_secs)
+    del argv
+    vgsl_model.Eval(FLAGS.train_dir, FLAGS.eval_dir, FLAGS.model_str,
+                    FLAGS.eval_data, FLAGS.decoder, FLAGS.num_steps,
+                    FLAGS.graph_def_file, FLAGS.eval_interval_secs)
 
 
 if __name__ == '__main__':
-  app.run()
+    app.run()

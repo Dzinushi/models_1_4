@@ -1,8 +1,9 @@
 import tensorflow as tf
 
+
 class Autoencoder(object):
 
-    def __init__(self, n_input, n_hidden, transfer_function=tf.nn.softplus, optimizer = tf.train.AdamOptimizer()):
+    def __init__(self, n_input, n_hidden, transfer_function=tf.nn.softplus, optimizer=tf.train.AdamOptimizer()):
         self.n_input = n_input
         self.n_hidden = n_hidden
         self.transfer = transfer_function
@@ -23,11 +24,10 @@ class Autoencoder(object):
         self.sess = tf.Session()
         self.sess.run(init)
 
-
     def _initialize_weights(self):
         all_weights = dict()
         all_weights['w1'] = tf.get_variable("w1", shape=[self.n_input, self.n_hidden],
-            initializer=tf.contrib.layers.xavier_initializer())
+                                            initializer=tf.contrib.layers.xavier_initializer())
         all_weights['b1'] = tf.Variable(tf.zeros([self.n_hidden], dtype=tf.float32))
         all_weights['w2'] = tf.Variable(tf.zeros([self.n_hidden, self.n_input], dtype=tf.float32))
         all_weights['b2'] = tf.Variable(tf.zeros([self.n_input], dtype=tf.float32))
@@ -38,12 +38,12 @@ class Autoencoder(object):
         return cost
 
     def calc_total_cost(self, X):
-        return self.sess.run(self.cost, feed_dict = {self.x: X})
+        return self.sess.run(self.cost, feed_dict={self.x: X})
 
     def transform(self, X):
         return self.sess.run(self.hidden, feed_dict={self.x: X})
 
-    def generate(self, hidden = None):
+    def generate(self, hidden=None):
         if hidden is None:
             hidden = self.sess.run(tf.random_normal([1, self.n_hidden]))
         return self.sess.run(self.reconstruction, feed_dict={self.hidden: hidden})
@@ -56,4 +56,3 @@ class Autoencoder(object):
 
     def getBiases(self):
         return self.sess.run(self.weights['b1'])
-

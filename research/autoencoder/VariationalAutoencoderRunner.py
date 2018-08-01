@@ -34,7 +34,7 @@ display_step = 1
 autoencoder = VariationalAutoencoder(
     n_input=784,
     n_hidden=200,
-    optimizer=tf.train.AdamOptimizer(learning_rate = 0.001))
+    optimizer=tf.train.AdamOptimizer(learning_rate=0.001))
 
 for epoch in range(training_epochs):
     avg_cost = 0.

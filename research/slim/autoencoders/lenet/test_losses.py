@@ -1,11 +1,13 @@
 import tensorflow as tf
 from research.slim.autoencoders.lenet import lenet_bm
+from research.slim.nets.lenet import lenet
 from tensorflow.contrib import slim
 
 image = tf.placeholder(tf.float32, shape=(1, 28, 28, 3))
 block_numbers = lenet_bm.lenet_bm.block_number
 for block in range(block_numbers):
-    output, end_points = lenet_bm.lenet_bm(image, train_block_num=block, sdc_num=1)
+    # output, end_points = lenet_bm.lenet_bm(image, train_block_num=block, sdc_num=1)
+    output, end_points = lenet(image, is_training=True)
 
     op_list_no_optimizer = tf.get_default_graph().get_operations()
 

@@ -104,7 +104,8 @@ def alexnet_v2(inputs,
             return net, end_points
         else:
             layer_scope = 'conv1'
-            net = slim.conv2d(inputs, 64, [11, 11], 4, trainable=False, reuse=tf.AUTO_REUSE, padding='VALID', scope=layer_scope)
+            net = slim.conv2d(inputs, 64, [11, 11], 4, trainable=False, reuse=tf.AUTO_REUSE, padding='VALID',
+                              scope=layer_scope)
             end_points[scope_with_sdc(layer_scope, 0)] = net
 
         layer_scope = 'pool1'
@@ -142,7 +143,7 @@ def alexnet_v2(inputs,
             return net, end_points
         else:
             layer_scope = 'conv3'
-            end_points[scope_with_sdc(layer_scope, 0)] = net =\
+            end_points[scope_with_sdc(layer_scope, 0)] = net = \
                 slim.conv2d(net, 384, [3, 3], trainable=False, reuse=tf.AUTO_REUSE, scope=layer_scope)
 
         # SDC 3
@@ -158,7 +159,7 @@ def alexnet_v2(inputs,
             return net, end_points
         else:
             layer_scope = 'conv4'
-            end_points[scope_with_sdc(layer_scope, 0)] = net =\
+            end_points[scope_with_sdc(layer_scope, 0)] = net = \
                 slim.conv2d(net, 384, [3, 3], trainable=False, reuse=tf.AUTO_REUSE, scope=layer_scope)
 
         # SDC 4

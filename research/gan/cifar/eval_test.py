@@ -18,7 +18,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
 import tensorflow as tf
 import eval  # pylint:disable=redefined-builtin
 
@@ -28,27 +27,27 @@ mock = tf.test.mock
 
 class EvalTest(tf.test.TestCase):
 
-  def _test_build_graph_helper(self, eval_real_images, conditional_eval):
-    FLAGS.eval_real_images = eval_real_images
-    FLAGS.conditional_eval = conditional_eval
-    # Mock `frechet_inception_distance` and `inception_score`, which are
-    # expensive.
-    with mock.patch.object(
-        eval.util, 'get_frechet_inception_distance') as mock_fid:
-      with mock.patch.object(eval.util, 'get_inception_scores') as mock_iscore:
-        mock_fid.return_value = 1.0
-        mock_iscore.return_value = 1.0
-        eval.main(None, run_eval_loop=False)
+    def _test_build_graph_helper(self, eval_real_images, conditional_eval):
+        FLAGS.eval_real_images = eval_real_images
+        FLAGS.conditional_eval = conditional_eval
+        # Mock `frechet_inception_distance` and `inception_score`, which are
+        # expensive.
+        with mock.patch.object(
+                eval.util, 'get_frechet_inception_distance') as mock_fid:
+            with mock.patch.object(eval.util, 'get_inception_scores') as mock_iscore:
+                mock_fid.return_value = 1.0
+                mock_iscore.return_value = 1.0
+                eval.main(None, run_eval_loop=False)
 
-  def test_build_graph_realdata(self):
-    self._test_build_graph_helper(True, False)
+    def test_build_graph_realdata(self):
+        self._test_build_graph_helper(True, False)
 
-  def test_build_graph_generateddata(self):
-    self._test_build_graph_helper(False, False)
+    def test_build_graph_generateddata(self):
+        self._test_build_graph_helper(False, False)
 
-  def test_build_graph_generateddataconditional(self):
-    self._test_build_graph_helper(False, True)
+    def test_build_graph_generateddataconditional(self):
+        self._test_build_graph_helper(False, True)
 
 
 if __name__ == '__main__':
-  tf.test.main()
+    tf.test.main()

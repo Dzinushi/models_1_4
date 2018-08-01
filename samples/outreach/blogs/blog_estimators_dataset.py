@@ -46,6 +46,8 @@ def downloadDataset(url, file):
         with open(file, "wb") as f:
             f.write(data)
             f.close()
+
+
 downloadDataset(URL_TRAIN, FILE_TRAIN)
 downloadDataset(URL_TEST, FILE_TEST)
 
@@ -57,6 +59,7 @@ feature_names = [
     'SepalWidth',
     'PetalLength',
     'PetalWidth']
+
 
 # Create an input function reading a file using the Dataset API
 # Then provide the results to the Estimator API
@@ -72,8 +75,8 @@ def my_input_fn(file_path, perform_shuffle=False, repeat_count=1):
         return d
 
     dataset = (tf.data.TextLineDataset(file_path)  # Read text file
-               .skip(1)  # Skip header row
-               .map(decode_csv))  # Transform each elem by applying decode_csv fn
+        .skip(1)  # Skip header row
+        .map(decode_csv))  # Transform each elem by applying decode_csv fn
     if perform_shuffle:
         # Randomizes input using a window of 256 elements (read into memory)
         dataset = dataset.shuffle(buffer_size=256)
@@ -82,6 +85,7 @@ def my_input_fn(file_path, perform_shuffle=False, repeat_count=1):
     iterator = dataset.make_one_shot_iterator()
     batch_features, batch_labels = iterator.get_next()
     return batch_features, batch_labels
+
 
 next_batch = my_input_fn(FILE_TRAIN, True)  # Will return 32 random elements
 
@@ -127,6 +131,7 @@ prediction_input = [[5.9, 3.0, 4.2, 1.5],  # -> 1, Iris Versicolor
                     [6.9, 3.1, 5.4, 2.1],  # -> 2, Iris Virginica
                     [5.1, 3.3, 1.7, 0.5]]  # -> 0, Iris Sentosa
 
+
 def new_input_fn():
     def decode(x):
         x = tf.split(x, 4)  # Need to split into our 4 features
@@ -137,6 +142,7 @@ def new_input_fn():
     iterator = dataset.make_one_shot_iterator()
     next_feature_batch = iterator.get_next()
     return next_feature_batch, None  # In prediction, we have no labels
+
 
 # Predict all our prediction_input
 predict_results = classifier.predict(input_fn=new_input_fn)

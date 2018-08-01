@@ -31,79 +31,79 @@ import tensorflow as tf
 
 
 def ArrayToDatum(arr):
-  """Converts numpy array to DatumProto.
-
-  Args:
-    arr: Numpy array of arbitrary shape.
-
-  Returns:
-    datum: DatumProto object.
-  """
-  datum = datum_pb2.DatumProto()
-  datum.float_list.value.extend(arr.astype(float).flat)
-  datum.shape.dim.extend(arr.shape)
-  return datum
+    """Converts numpy array to DatumProto.
+  
+    Args:
+      arr: Numpy array of arbitrary shape.
+  
+    Returns:
+      datum: DatumProto object.
+    """
+    datum = datum_pb2.DatumProto()
+    datum.float_list.value.extend(arr.astype(float).flat)
+    datum.shape.dim.extend(arr.shape)
+    return datum
 
 
 def DatumToArray(datum):
-  """Converts data saved in DatumProto to numpy array.
-
-  Args:
-    datum: DatumProto object.
-
-  Returns:
-    Numpy array of arbitrary shape.
-  """
-  return np.array(datum.float_list.value).astype(float).reshape(datum.shape.dim)
+    """Converts data saved in DatumProto to numpy array.
+  
+    Args:
+      datum: DatumProto object.
+  
+    Returns:
+      Numpy array of arbitrary shape.
+    """
+    return np.array(datum.float_list.value).astype(float).reshape(datum.shape.dim)
 
 
 def SerializeToString(arr):
-  """Converts numpy array to serialized DatumProto.
-
-  Args:
-    arr: Numpy array of arbitrary shape.
-
-  Returns:
-    Serialized DatumProto string.
-  """
-  datum = ArrayToDatum(arr)
-  return datum.SerializeToString()
+    """Converts numpy array to serialized DatumProto.
+  
+    Args:
+      arr: Numpy array of arbitrary shape.
+  
+    Returns:
+      Serialized DatumProto string.
+    """
+    datum = ArrayToDatum(arr)
+    return datum.SerializeToString()
 
 
 def ParseFromString(string):
-  """Converts serialized DatumProto string to numpy array.
-
-  Args:
-    string: Serialized DatumProto string.
-
-  Returns:
-    Numpy array.
-  """
-  datum = datum_pb2.DatumProto()
-  datum.ParseFromString(string)
-  return DatumToArray(datum)
+    """Converts serialized DatumProto string to numpy array.
+  
+    Args:
+      string: Serialized DatumProto string.
+  
+    Returns:
+      Numpy array.
+    """
+    datum = datum_pb2.DatumProto()
+    datum.ParseFromString(string)
+    return DatumToArray(datum)
 
 
 def ReadFromFile(file_path):
-  """Helper function to load data from a DatumProto format in a file.
-
-  Args:
-    file_path: Path to file containing data.
-
-  Returns:
-    data: Numpy array.
-  """
-  with tf.gfile.FastGFile(file_path, 'r') as f:
-    return ParseFromString(f.read())
+    """Helper function to load data from a DatumProto format in a file.
+  
+    Args:
+      file_path: Path to file containing data.
+  
+    Returns:
+      data: Numpy array.
+    """
+    with tf.gfile.FastGFile(file_path, 'r') as f:
+        return ParseFromString(f.read())
 
 
 def WriteToFile(data, file_path):
-  """Helper function to write data to a file in DatumProto format.
-
-  Args:
-    data: Numpy array.
-    file_path: Path to file that will be written.
-  """
-  serialized_data = SerializeToString(data)
-  with tf.gfile.FastGFile(file_path, 'w') as f:
-    f.write(serialized_data)
+    """Helper function to write data to a file in DatumProto format.
+  
+    Args:
+      data: Numpy array.
+      file_path: Path to file that will be written.
+    """
+    serialized_data = SerializeToString(data)
+    with tf.gfile.FastGFile(file_path, 'w') as f:
+        f.write(serialized_data)

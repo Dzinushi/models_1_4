@@ -18,23 +18,22 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
-
 import tensorflow as tf
 import eval  # pylint:disable=redefined-builtin
 
 
 class EvalTest(tf.test.TestCase):
 
-  def _test_build_graph_helper(self, eval_real_images):
-    tf.flags.FLAGS.eval_real_images = eval_real_images
-    eval.main(None, run_eval_loop=False)
+    def _test_build_graph_helper(self, eval_real_images):
+        tf.flags.FLAGS.eval_real_images = eval_real_images
+        eval.main(None, run_eval_loop=False)
 
-  def test_build_graph_realdata(self):
-    self._test_build_graph_helper(True)
+    def test_build_graph_realdata(self):
+        self._test_build_graph_helper(True)
 
-  def test_build_graph_generateddata(self):
-    self._test_build_graph_helper(False)
+    def test_build_graph_generateddata(self):
+        self._test_build_graph_helper(False)
+
 
 if __name__ == '__main__':
-  tf.test.main()
+    tf.test.main()

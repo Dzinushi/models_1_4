@@ -43,8 +43,8 @@ tf.app.flags.DEFINE_integer("data_dimension", None,
 tf.app.flags.DEFINE_integer("batch_size", 4,
                             "Batch size.")
 tf.app.flags.DEFINE_integer("num_samples", 4,
-                           "The number of samples (or particles) for multisample "
-                           "algorithms.")
+                            "The number of samples (or particles) for multisample "
+                            "algorithms.")
 tf.app.flags.DEFINE_string("logdir", "/tmp/smc_vi",
                            "The directory to keep checkpoints and summaries in.")
 tf.app.flags.DEFINE_integer("random_seed", None,
@@ -84,16 +84,17 @@ SPEECH_DEFAULT_DATA_DIMENSION = 200
 
 
 def main(unused_argv):
-  tf.logging.set_verbosity(tf.logging.INFO)
-  if FLAGS.data_dimension is None:
-    if FLAGS.dataset_type == "pianoroll":
-      FLAGS.data_dimension = PIANOROLL_DEFAULT_DATA_DIMENSION
-    elif FLAGS.dataset_type == "speech":
-      FLAGS.data_dimension = SPEECH_DEFAULT_DATA_DIMENSION
-  if FLAGS.mode == "train":
-    runners.run_train(FLAGS)
-  elif FLAGS.mode == "eval":
-    runners.run_eval(FLAGS)
+    tf.logging.set_verbosity(tf.logging.INFO)
+    if FLAGS.data_dimension is None:
+        if FLAGS.dataset_type == "pianoroll":
+            FLAGS.data_dimension = PIANOROLL_DEFAULT_DATA_DIMENSION
+        elif FLAGS.dataset_type == "speech":
+            FLAGS.data_dimension = SPEECH_DEFAULT_DATA_DIMENSION
+    if FLAGS.mode == "train":
+        runners.run_train(FLAGS)
+    elif FLAGS.mode == "eval":
+        runners.run_eval(FLAGS)
+
 
 if __name__ == "__main__":
-  tf.app.run()
+    tf.app.run()
