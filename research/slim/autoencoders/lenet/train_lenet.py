@@ -1,14 +1,13 @@
 from __future__ import division, print_function, absolute_import
 
 import tensorflow as tf
-from research.slim.autoencoders.optimizers import lenet_custom
 from tensorflow.contrib import slim
 from collections import defaultdict
 from datasets import flowers
 from time import time
+from nets import lenet
 
 from preprocessing import inception_preprocessing
-from research.slim.autoencoders.optimizers.gradient_descent_optimizer_v2 import GradientDescentOptimizer_2
 
 model_save_path = '/media/w_programs/Development/Python/tf_autoencoders/checkpoints/lenet_flowers_sgd_1_epoch/train_classificator_sgd_2'
 
@@ -45,7 +44,7 @@ def load_batch(dataset, batch_size, height=224, width=224, is_training=True):
 
 
 # Set autoencoder model
-model_fn = lenet_custom.lenet
+model_fn = lenet.lenet
 
 # Set image size
 image_size = model_fn.default_image_size
@@ -70,7 +69,7 @@ with tf.Graph().as_default() as graph:
     # =================================================================================================
     loss_op = tf.losses.softmax_cross_entropy(labels, outputs)
     # optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, momentum=0.9)
-    optimizer = GradientDescentOptimizer_2(learning_rate=lr, activation_name='leaky_relu')
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=lr)
     # optimizer = tf.train.GradientDescentOptimizer(learning_rate=lr)
     train_op = slim.learning.create_train_op(loss_op, optimizer)
 

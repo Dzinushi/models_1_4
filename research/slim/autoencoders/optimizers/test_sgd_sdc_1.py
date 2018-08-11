@@ -1,17 +1,23 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.framework import ops
-from research.slim.autoencoders.optimizers.gradient_descent_optimizer_v2 import GradientDescentOptimizer
+from research.slim.autoencoders.optimizers.sgd_sdc_1 import GradientDescentOptimizerSDC1
 from tensorflow.contrib import slim
+from collections import defaultdict
+from research.slim.autoencoders.optimizers.gradient_sdc_1 import GradientSDC1, Formulas, DActivation
 
 
 def model(input):
     with tf.variable_scope('Model'):
         end_point = {}
         end_point['input_sdc_0'] = net = input
-        end_point['output_sdc_0'] = net = slim.conv2d(net, 2, [2, 2], padding='VALID', scope='conv1')
-        end_point['input_sdc_1'] = net = slim.conv2d_transpose(net, 1, [2, 2], padding='VALID', scope='input_recovery')
-        end_point['output_sdc_1'] = net = slim.conv2d(net, 2, [2, 2], reuse=True, padding='VALID', scope='conv1')
+        end_point['output_sdc_0'] = net = slim.conv2d(net, 2, [2, 2], padding='VALID', activation_fn=tf.nn.tanh,
+                                                      scope='conv1')
+        end_point['input_sdc_1'] = net = slim.conv2d_transpose(net, 1, [2, 2],
+                                                               padding='VALID', scope='input_recovery')
+        end_point['output_sdc_1'] = net = slim.conv2d(net, 2, [2, 2], reuse=True, padding='VALID',
+                                                      activation_fn=tf.nn.tanh,
+                                                      scope='conv1')
         return net, end_point
 
 
@@ -62,8 +68,10 @@ def log(sess):
     print_matrix(sess.run(end_points['output_sdc_1']), 'output_sdc_1')
     print_matrix(sess.run(tf.get_default_graph().get_tensor_by_name('Model/conv1/weights:0')), 'weights_output_sdc_0')
     print_matrix(sess.run(tf.get_default_graph().get_tensor_by_name('Model/conv1/biases:0')), 'biases_output_sdc_0')
-    print_matrix(sess.run(tf.get_default_graph().get_tensor_by_name('Model/input_recovery/weights:0')), 'weights_input_sdc_1')
-    print_matrix(sess.run(tf.get_default_graph().get_tensor_by_name('Model/input_recovery/biases:0')), 'biases_input_sdc_1')
+    print_matrix(sess.run(tf.get_default_graph().get_tensor_by_name('Model/input_recovery/weights:0')),
+                 'weights_input_sdc_1')
+    print_matrix(sess.run(tf.get_default_graph().get_tensor_by_name('Model/input_recovery/biases:0')),
+                 'biases_input_sdc_1')
 
 
 def assign_weight_biases():
@@ -71,8 +79,7 @@ def assign_weight_biases():
         [[
             [-0.5, 0.4],
             [0.6, 0.5],
-        ],
-        [
+        ], [
             [0.1, -0.2],
             [0.7, 0.1],
         ]])
@@ -88,20 +95,7 @@ def assign_weight_biases():
     weights[1][0][0][1] = weights_data[1][1][0]
     weights[1][1][0][1] = weights_data[1][1][1]
 
-    # weights = np.array([
-    #     [
-    #         [0.1, 0.1],
-    #         [0.0, 0.0],
-    #     ],
-    #     [
-    #         [0.2, 0.0],
-    #         [0.0, 0.0],
-    #     ]])
-    # biases_output = np.array([0.000, 0.000])
-
     biases_input = np.array([0.003])
-
-    # weights = np.reshape(weights, (2, 2, 1, 2))
 
     with tf.variable_scope('Model', reuse=True):
         return [tf.get_variable('conv1/weights').assign(weights),
@@ -129,9 +123,19 @@ loss_output = tf.reduce_sum(tf.divide(tf.square(end_points['output_sdc_1'] - end
 loss = loss_input + loss_output
 tf.losses.add_loss(loss)
 
-# optimizer = GradientDescentOptimizerSDC1(learning_rate=0.01, activation_name='relu')
-optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.01)
-gradient = tf.train.GradientDescentOptimizer(learning_rate=0.01).compute_gradients(loss)
+# Create custom gradient for SDC1
+# grad = tf.placeholder(tf.float32, shape=weight_shape, name=)
+grad = {}
+for var in tf.trainable_variables():
+    grad[var.name] = tf.placeholder(tf.float32, shape=var.shape, name=var._shared_name + '_grad')
+optimizer = GradientDescentOptimizerSDC1(grad=grad, learning_rate=0.01)
+# optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.01)
+# params = tf.trainable_variables()
+# gradients = tf.gradients(loss, params)
+# optimizer.apply_gradients(zip(gradients, params))
+
+gradient = optimizer.compute_gradients(loss)
+
 train_op = slim.learning.create_train_op(loss, optimizer)
 
 list_assigned = assign_weight_biases()
@@ -164,26 +168,41 @@ summary_op = tf.summary.merge(list(summaries), name='summary_op')
 
 ################################
 logdir = '/media/w_programs/Development/Python/tf_autoencoders/checkpoints/simple_sdc_1/'
+
+step = 1000
+
 sv = tf.train.Supervisor(logdir=logdir,
                          graph=tf.get_default_graph(),
-                         summary_op=summary_op)
-step = 1000
+                         summary_op=summary_op,
+                         global_step=0)
+
 with sv.managed_session() as sess:
-    # sess.run(list_assigned)
+    sess.run(list_assigned)
     # log(sess)
+
     for i in range(step):
-        cost = sess.run(train_op)
-        gradient_datas = sess.run(gradient)
-        for tensor, var in gradient:
-            print('{} = {}'.format(var._shared_name, sess.run(tf.get_default_graph().get_tensor_by_name(tensor.name))))
-        # print(sess.run(gradient))
-        if (i + 1) % 100 == 0:
-            print(str(i + 1) + ') Loss: ', cost)
-            # print_matrix(sess.run(end_points['input_sdc_1']), 'input_sdc_1')
-            # print_matrix(sess.run(tf.get_default_graph().get_tensor_by_name('input_recovery/weights:0')), 'weights_input_sdc_1')
-        # log(sess)
-        # print_matrix(sess.run(tf.get_default_graph().get_tensor_by_name('conv1_1/weights:0')), 'weights_output_sdc_1')
+        # Calc custom gradient
+        x = sess.run([end_points['input_sdc_0'], end_points['input_sdc_1']])
+        y = sess.run([end_points['output_sdc_0'], end_points['output_sdc_1']])
+
+        # Create custom gradient for autoencoder_sdc_1
+        grad_custom = GradientSDC1(grads=grad,
+                                   x=x,
+                                   y=y,
+                                   stride=1,
+                                   padding='VALID',
+                                   formulas=Formulas.golovko,
+                                   d_activation_name=DActivation.sigmoid)
+
+        # Train autoencoder
+        cost = sess.run(train_op, feed_dict=grad_custom.calc())
+
+        print(str(i + 1) + ') Loss: ', cost)
+        if (i + 1) % 1001 == 0:
+            log(sess)
 
     checkpoint_path = logdir + 'model.ckpt'
     sv.saver.save(sess, save_path=checkpoint_path, global_step=step)
     sv.saver.export_meta_graph(logdir + 'graph.pbtxt')
+
+

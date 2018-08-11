@@ -22,3 +22,4 @@ for block in range(block_numbers):
 
     op_list_yes_optimizer = tf.get_default_graph().get_operations()
     print()
+
