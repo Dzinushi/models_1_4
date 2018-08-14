@@ -5,7 +5,7 @@ from tensorflow.contrib.layers.python.layers import initializers
 from tensorflow.python.ops import init_ops
 import tensorflow as tf
 
-DCONV = '_dconv2d'
+DCONV = '_recovery'
 
 
 def is_reuse(net, net_d, index=0, sdc_num=2):

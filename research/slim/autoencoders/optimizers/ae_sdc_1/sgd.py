@@ -2,45 +2,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
 from tensorflow.python.framework import ops
-from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import state_ops
-from tensorflow.python.ops import resource_variable_ops
 from tensorflow.python.training import optimizer
-from tensorflow.python.training import training_ops
-import numpy as np
-
-activation_dic = {
-    'relu': 1.0,
-    'leaky_relu': 0.2
-}
-
-
-def derivative_activation(activation_name):
-    try:
-        return activation_dic[activation_name]
-    except KeyError as e:
-        # можно также присвоить значение по умолчанию вместо бросания исключения
-        raise ValueError('Undefined unit: {}'.format(e.args[0]))
-
-
-def reshape_2d(tensor, axis=0):
-    # if len(tensor.shape) != 4:
-    #     return tensor
-    shape = tensor.shape
-    mult = 1
-    for dimension in shape:
-        if dimension.value != 1:
-            mult *= dimension.value
-    if axis == 0:
-        tennsor_2d = tf.reshape(tensor, shape=(1, mult))
-    elif axis == 1:
-        tennsor_2d = tf.reshape(tensor, shape=(mult, 1))
-    else:
-        raise ValueError('Axis must have 2 dimensional (0 or 1): {}'.format(axis))
-    return tennsor_2d
 
 
 # With derivative

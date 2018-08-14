@@ -8,7 +8,6 @@ from datasets import flowers
 from time import time
 
 from preprocessing import inception_preprocessing
-from research.slim.autoencoders.optimizers.sgd_sdc_1 import GradientDescentOptimizerSDC1
 
 model_save_path = '/media/w_programs/Development/Python/tf_autoencoders/checkpoints/lenet_flowers_sgd_sdc_1_epoch_1/train_ae'
 
@@ -126,7 +125,7 @@ for train_block_number in range(block_count):
         loss_op = tf.reduce_mean(loss_list)
 
         # optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, momentum=0.9)
-        optimizer = GradientDescentOptimizerSDC1(learning_rate=lr, activation_name='relu')
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate=lr)
         # optimizer = tf.train.GradientDescentOptimizer(learning_rate=lr)
         train_op = slim.learning.create_train_op(loss_op, optimizer)
 
