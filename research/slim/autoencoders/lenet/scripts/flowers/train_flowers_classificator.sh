@@ -9,6 +9,6 @@ python3 /media/data/soft/enviroment/models_old/research/slim/autoencoders/train_
     --optimizer=rmsprop \
     --model_name=lenet \
     --batch_size=10 \
-    --num_epoch=10 \
+    --num_epoch=1 \
     --save_summaries_secs=1 \
     --learning_rate=0.001

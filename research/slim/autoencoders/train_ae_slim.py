@@ -7,9 +7,15 @@ from datasets import dataset_factory
 from autoencoders import ae_factory
 from collections import defaultdict
 from time import time
+from autoencoders.optimizers.ae_sdc_1.sgd import GradientDescentOptimizerSDC1
+from autoencoders.optimizers.ae_sdc_1.gradient import GradientSDC1
+from autoencoders.optimizers.optimizer_utils import layer_shape_type, Formulas
 
 tf.app.flags.DEFINE_string('ae_name', None,
                            'Autoencoder model name (See slim/autoencoders/)')
+
+tf.app.flags.DEFINE_string('formulas', None,
+                           'Formulas for calculation different custom gradient. Must be "golovko" or "hinton"')
 
 tf.app.flags.DEFINE_integer('max_number_of_steps', None,
                             'The maximum number of training steps.')
@@ -37,52 +43,52 @@ tf.app.flags.DEFINE_integer(
 # Optimization Flags #
 ######################
 
-tf.app.flags.DEFINE_float(
-    'weight_decay', 0.00004, 'The weight decay on the model weights.')
-
-tf.app.flags.DEFINE_string(
-    'optimizer', 'rmsprop',
-    'The name of the optimizer, one of "adadelta", "adagrad", "adam",'
-    '"ftrl", "momentum", "sgd" or "rmsprop".')
-
-tf.app.flags.DEFINE_float(
-    'adadelta_rho', 0.95,
-    'The decay rate for adadelta.')
-
-tf.app.flags.DEFINE_float(
-    'adagrad_initial_accumulator_value', 0.1,
-    'Starting value for the AdaGrad accumulators.')
-
-tf.app.flags.DEFINE_float(
-    'adam_beta1', 0.9,
-    'The exponential decay rate for the 1st moment estimates.')
-
-tf.app.flags.DEFINE_float(
-    'adam_beta2', 0.999,
-    'The exponential decay rate for the 2nd moment estimates.')
-
-tf.app.flags.DEFINE_float('opt_epsilon', 1.0, 'Epsilon term for the optimizer.')
-
-tf.app.flags.DEFINE_float('ftrl_learning_rate_power', -0.5,
-                          'The learning rate power.')
-
-tf.app.flags.DEFINE_float(
-    'ftrl_initial_accumulator_value', 0.1,
-    'Starting value for the FTRL accumulators.')
-
-tf.app.flags.DEFINE_float(
-    'ftrl_l1', 0.0, 'The FTRL l1 regularization strength.')
-
-tf.app.flags.DEFINE_float(
-    'ftrl_l2', 0.0, 'The FTRL l2 regularization strength.')
-
-tf.app.flags.DEFINE_float(
-    'momentum', 0.9,
-    'The momentum for the MomentumOptimizer and RMSPropOptimizer.')
-
-tf.app.flags.DEFINE_float('rmsprop_momentum', 0.9, 'Momentum.')
-
-tf.app.flags.DEFINE_float('rmsprop_decay', 0.9, 'Decay term for RMSProp.')
+# tf.app.flags.DEFINE_float(
+#     'weight_decay', 0.00004, 'The weight decay on the model weights.')
+#
+# tf.app.flags.DEFINE_string(
+#     'optimizer', 'rmsprop',
+#     'The name of the optimizer, one of "adadelta", "adagrad", "adam",'
+#     '"ftrl", "momentum", "sgd" or "rmsprop".')
+#
+# tf.app.flags.DEFINE_float(
+#     'adadelta_rho', 0.95,
+#     'The decay rate for adadelta.')
+#
+# tf.app.flags.DEFINE_float(
+#     'adagrad_initial_accumulator_value', 0.1,
+#     'Starting value for the AdaGrad accumulators.')
+#
+# tf.app.flags.DEFINE_float(
+#     'adam_beta1', 0.9,
+#     'The exponential decay rate for the 1st moment estimates.')
+#
+# tf.app.flags.DEFINE_float(
+#     'adam_beta2', 0.999,
+#     'The exponential decay rate for the 2nd moment estimates.')
+#
+# tf.app.flags.DEFINE_float('opt_epsilon', 1.0, 'Epsilon term for the optimizer.')
+#
+# tf.app.flags.DEFINE_float('ftrl_learning_rate_power', -0.5,
+#                           'The learning rate power.')
+#
+# tf.app.flags.DEFINE_float(
+#     'ftrl_initial_accumulator_value', 0.1,
+#     'Starting value for the FTRL accumulators.')
+#
+# tf.app.flags.DEFINE_float(
+#     'ftrl_l1', 0.0, 'The FTRL l1 regularization strength.')
+#
+# tf.app.flags.DEFINE_float(
+#     'ftrl_l2', 0.0, 'The FTRL l2 regularization strength.')
+#
+# tf.app.flags.DEFINE_float(
+#     'momentum', 0.9,
+#     'The momentum for the MomentumOptimizer and RMSPropOptimizer.')
+#
+# tf.app.flags.DEFINE_float('rmsprop_momentum', 0.9, 'Momentum.')
+#
+# tf.app.flags.DEFINE_float('rmsprop_decay', 0.9, 'Decay term for RMSProp.')
 
 #######################
 # Learning Rate Flags #
@@ -155,17 +161,6 @@ def load_batch(dataset, batch_size, height=224, width=224, is_training=True):
     return images, labels
 
 
-# def train_batch(sess, train_op, epoch, batch):
-#     start_time = time.time()
-#     # total_loss, global_step_count, _ = sess.run([train_op, global_step, metrics_op])
-#     _, c = sess.run([train_op, loss])
-#     time_elapsed = time.time() - start_time
-#     tf.logging.info(
-#         'Epoch={}, batch={}/{}, cost= {:.5f}, ({:.3f} sec/step)'.format((epoch + 1), batch + 1, batch_per_ep, c,
-#                                                                         time_elapsed))
-#     return c
-
-
 def _configure_optimizer(learning_rate):
     """Configures the optimizer used for training.
 
@@ -223,7 +218,6 @@ def init_fn(list_pretrained_vars):
     list_assign_op = []
     for var in global_vars:
         if list_pretrained_vars[var._shared_name] is not None:
-            # list_assign_op.append(tf.assign(var, list_pretrained_vars[var._shared_name]))
             list_assign_op.append(var.assign(list_pretrained_vars[var._shared_name]))
     return list_assign_op
 
@@ -270,7 +264,8 @@ def main(_):
             batch_per_ep = dataset.num_samples // FLAGS.batch_size
 
             # Get model data
-            ae_outputs, end_points = autoencoder_fn(images, train_block_num=train_block_number, sdc_num=sdc_num)
+            ae_outputs, end_points, pad, stride = autoencoder_fn(images, train_block_num=train_block_number,
+                                                                 sdc_num=sdc_num)
 
             if train_block_number > 0:
                 checkpoint_path = tf.train.latest_checkpoint(logdir_fn(train_block_number - 1))
@@ -281,15 +276,22 @@ def main(_):
             # LOSS
             # =================================================================================================
             loss_map = autoencoder_loss_map_fn(end_points, train_block_num=train_block_number, sdc_num=sdc_num)
+            assert len(loss_map) == 2
             loss_list = []
             for loss in loss_map:
-                loss_list.append(tf.reduce_sum(tf.divide(tf.square(loss_map[loss]['input'] - loss_map[loss]['output']),
-                                                         tf.constant(2.0))))
-            loss_op = tf.reduce_mean(loss_list)
+                loss_list.append(tf.reduce_sum(tf.square(loss_map[loss]['input'] - loss_map[loss]['output'])))
+            loss_op = tf.divide(loss_list[0] + loss_list[1], tf.constant(2.0))
             tf.losses.add_loss(loss_op)
             # loss_op = tf.losses.get_total_loss()
 
-            optimizer = _configure_optimizer(FLAGS.learning_rate)
+            # Create custom gradient for SDC1
+            grad = {}
+            for var in tf.trainable_variables():
+                grad[var.name] = tf.placeholder(tf.float32, shape=var.shape, name=var._shared_name + '_grad')
+
+            # optimizer = _configure_optimizer(FLAGS.learning_rate)
+            optimizer = GradientDescentOptimizerSDC1(grad, FLAGS.learning_rate)
+
             train_op = slim.learning.create_train_op(loss_op, optimizer)
 
             # Gather initial summaries.
@@ -302,9 +304,9 @@ def main(_):
                 summaries.add(tf.summary.scalar('sparsity/' + end_point,
                                                 tf.nn.zero_fraction(x)))
 
-            # Add summaries for losses.
-            for loss in tf.get_collection(tf.GraphKeys.LOSSES):
-                summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
+            # # Add summaries for losses.
+            # for loss in tf.get_collection(tf.GraphKeys.LOSSES):
+            #     summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
 
             # Add summaries for variables.
             for variable in slim.get_model_variables():
@@ -321,6 +323,15 @@ def main(_):
             else:
                 number_of_steps = batch_per_ep * FLAGS.num_epoch
 
+        ###########################################################################################
+        # USER PARAMS for custom gradient
+        ###########################################################################################
+        # If input_sdc_1 is recovered first input layer, it's shape = (NHWC),  else = (HWCN)
+        input_shape_type = layer_shape_type(loss_map[0]['input'])
+        activation_name = str.lower(loss_map[0]['output'].name.split('/')[-1].split(':')[0])
+        if activation_name == 'maximum':
+            activation_name = str.lower(loss_map[0]['output'].name.split('/')[2])
+
         # Create session using Supervisor
         sv = tf.train.Supervisor(logdir=logdir_fn(train_block_number),
                                  save_model_secs=100000000,
@@ -336,9 +347,27 @@ def main(_):
             global_step = sess.run(sv.global_step)
             i = 0
             while global_step < number_of_steps:
+
                 time_start = time()
-                loss = sess.run(train_op)
+
+                # Calc custom gradient
+                x = sess.run([loss_map[0]['input'], loss_map[0]['output']])
+                y = sess.run([loss_map[1]['input'], loss_map[1]['output']])
+
+                # Create custom gradient for autoencoder_sdc_1
+                grad_custom = GradientSDC1(grads=grad,
+                                           x=x,
+                                           y=y,
+                                           stride=stride,
+                                           padding=pad,
+                                           formulas=Formulas[FLAGS.formulas],
+                                           activation_name=activation_name,
+                                           input_shape_type=input_shape_type)
+
+                # Train autoencoder
+                loss = sess.run(train_op, feed_dict=grad_custom.run())
                 time_end = time()
+
                 total_loss += loss
                 if (global_step + 1) % FLAGS.log_every_n_steps == 0:
                     tf.logging.info(

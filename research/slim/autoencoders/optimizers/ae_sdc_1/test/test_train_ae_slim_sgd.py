@@ -12,7 +12,7 @@ from research.slim.autoencoders.optimizers.ae_sdc_1.test.simple_model_bm import 
 max_step = 100
 formulas = Formulas.golovko
 activation_fn = tf.nn.relu
-train_block_num = 1
+train_block_num = 0
 
 logdir = '/media/w_programs/Development/Python/tf_autoencoders/checkpoints/simple_sdc_1/'
 

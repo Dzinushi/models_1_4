@@ -26,6 +26,36 @@ def d_activation_fn(y, name):
     return result
 
 
+# @vectorize(["float32(float32)"], target='cuda')
+def d_relu_cuda(y):
+    y[y > 0] = 1.0
+    y[y < 0] = 0.0
+    return y
+
+
+# @vectorize(["float32(float32)"], target='cuda')
+def d_leakyrelu_cuda(y):
+    y[y > 0] = 1.0
+    y[y < 0] = 0.0
+    return y
+
+
+# @vectorize(["float32(float32)"], target='cuda')
+def d_sigmoid_cuda(y):
+    return y * (1.0 - y)
+
+
+# @vectorize(["float32(float32)"], target='cuda')
+def d_tanh_cuda(y):
+    return 1.0 - pow(y, 2)
+
+
+d_act_dic = {'relu': d_relu_cuda,
+             'leakyrelu': d_leakyrelu_cuda,
+             'sigmoid': d_sigmoid_cuda,
+             'tanh': d_tanh_cuda}
+
+
 # First input layer must contained 'input' in names. It has another layer shape type
 def layer_shape_type(layer_tensor):
     if layer_tensor.name.find('input'):

@@ -1,17 +1,20 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.framework import ops
-from research.slim.autoencoders.optimizers.ae_sdc_1.sgd import GradientDescentOptimizerSDC1
-from research.slim.autoencoders.optimizers.ae_sdc_1.gradient import GradientSDC1
+from autoencoders.optimizers.ae_sdc_1.sgd import GradientDescentOptimizerSDC1 as sgd_custom
+from research.slim.autoencoders.optimizers.ae_sdc_1.gradient_numpy import GradientSDC1 as gradient_custom_cpu
+from research.slim.autoencoders.optimizers.ae_sdc_1.gradient import GradientSDC1 as gradient_custom_old_cpu
 from tensorflow.contrib import slim
-from research.slim.autoencoders.optimizers.optimizer_utils import Formulas, layer_shape_type
+from autoencoders.optimizers.optimizer_utils import Formulas, layer_shape_type
+from timeit import default_timer as timer
 
-
-max_step = 100
-stride = 2
+max_step = 1000
+stride = 1
 padding = 'SAME'
-formulas = Formulas.golovko
-activation_fn = tf.nn.relu
+formulas = Formulas.hinton
+activation_fn = tf.nn.tanh
+gradient_custom = gradient_custom_cpu
+alpha = 0.001
 
 
 # WARNING! first layer must have name 'input'. Recovery layer must have prefix 'recovery'.
@@ -19,12 +22,12 @@ def model(input):
     with tf.variable_scope('Model'):
         end_point = {}
         end_point['input_sdc_0'] = net = input
-        end_point['output_sdc_0'] = net = slim.conv2d(net, 2, [2, 2], stride=stride, padding=padding,
+        end_point['output_sdc_0'] = net = slim.conv2d(net, 5, [5, 5], stride=stride, padding=padding,
                                                       activation_fn=activation_fn,
                                                       scope='conv1')
-        end_point['input_sdc_1'] = net = slim.conv2d_transpose(net, 1, [2, 2], stride=stride,
+        end_point['input_sdc_1'] = net = slim.conv2d_transpose(net, 3, [5, 5], stride=stride,
                                                                padding=padding, scope='input_recovery')
-        end_point['output_sdc_1'] = net = slim.conv2d(net, 2, [2, 2], reuse=True, stride=stride, padding=padding,
+        end_point['output_sdc_1'] = net = slim.conv2d(net, 5, [5, 5], reuse=True, stride=stride, padding=padding,
                                                       activation_fn=activation_fn,
                                                       scope='conv1')
         return net, end_point
@@ -34,8 +37,8 @@ def model_fc(input):
     with tf.variable_scope('Model'):
         end_point = {}
         end_point['input_sdc_0'] = net = input
-        end_point['conv1_sdc_0'] = net = slim.conv2d(net, 3, [2, 2], stride=2, padding='SAME', trainable=False,
-                          activation_fn=tf.nn.relu, scope='conv1')
+        end_point['conv1_sdc_0'] = net = slim.conv2d(net, 3, [5, 5], stride=stride, padding='SAME', trainable=False,
+                                                     activation_fn=tf.nn.relu, scope='conv1')
         end_point['input_sdc_0'] = net = slim.flatten(net, scope='flatten')
         end_point['output_sdc_0'] = net = slim.fully_connected(net, 2, scope='fc1')
         end_point['input_sdc_1'] = net = slim.fully_connected(net, 4, scope='flatten_recovery')
@@ -127,11 +130,12 @@ def assign_weight_biases():
                 tf.get_variable('input_recovery/biases').assign(biases_input)]
 
 
-input_sdc_0 = np.matrix([[0.5, 0.6],
-                         [0.4, 0.7]])
+# input_sdc_0 = np.matrix([[0.5, 0.6],
+#                          [0.4, 0.7]])
+input_sdc_0 = np.random.rand(300)
 
 input = ops.convert_to_tensor(input_sdc_0, dtype=tf.float32, name='input_sdc_0')
-input = tf.reshape(input, shape=(1, 2, 2, 1))
+input = tf.reshape(input, shape=(1, 10, 10, 3))
 
 model_ae, end_points = model(input)
 
@@ -147,11 +151,11 @@ grad = {}
 for var in tf.trainable_variables():
     grad[var.name] = tf.placeholder(tf.float32, shape=var.shape, name=var._shared_name + '_grad')
 
-optimizer = GradientDescentOptimizerSDC1(grad=grad, learning_rate=0.01)
+optimizer = sgd_custom(grad=grad, learning_rate=alpha)
 
 train_op = slim.learning.create_train_op(loss, optimizer)
 
-list_assigned = assign_weight_biases()
+# list_assigned = assign_weight_biases()
 
 ################################
 # SUMMARIES #
@@ -195,30 +199,49 @@ sv = tf.train.Supervisor(logdir=logdir,
                          graph=tf.get_default_graph(),
                          summary_op=summary_op,
                          global_step=0)
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
 
-with sv.managed_session() as sess:
-    sess.run(list_assigned)
+with sv.managed_session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+    # sess.run(list_assigned)
     # log(sess)
 
+    timer_list = []
     for i in range(max_step):
+
         # Calc custom gradient
+        start = timer()
         x = sess.run([end_points['input_sdc_0'], end_points['input_sdc_1']])
         y = sess.run([end_points['output_sdc_0'], end_points['output_sdc_1']])
+        timer_list.append(timer() - start)
 
         # Create custom gradient for autoencoder_sdc_1
-        grad_custom = GradientSDC1(grads=grad,
-                                   x=x,
-                                   y=y,
-                                   stride=stride,
-                                   padding=padding,
-                                   formulas=formulas,
-                                   activation_name=activation_name,
-                                   input_shape_type=input_shape_type)
+
+        start = timer()
+        grad_custom = gradient_custom(grads=grad,
+                                      x=x,
+                                      y=y,
+                                      stride=stride,
+                                      padding=padding,
+                                      formulas=formulas,
+                                      activation_name=activation_name,
+                                      input_shape_type=input_shape_type)
+        grad_values = grad_custom.run()
+        timer_list.append(timer() - start)
 
         # Train autoencoder
-        cost = sess.run(train_op, feed_dict=grad_custom.run())
+        start = timer()
+        cost = sess.run(train_op, feed_dict=grad_values)
+        timer_list.append(timer() - start)
 
-        print(str(i + 1) + ') Loss: ', cost)
+        print(str(i + 1) + ') Loss: {:.5f}; "x" and "y": {:.3f}; grad_custom: {:.6f}; sess.run: {:.3f}'.format(cost,
+                                                                                                               timer_list[
+                                                                                                                   0],
+                                                                                                               timer_list[
+                                                                                                                   1],
+                                                                                                               timer_list[
+                                                                                                                   2]))
+        timer_list.clear()
+
         if (i + 1) % max_step + 1 == 0:
             log(sess)
 

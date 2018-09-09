@@ -1,5 +1,6 @@
 import numpy as np
-from research.slim.autoencoders.optimizers.optimizer_utils import Formulas, LayerShapeType, padding_fn, d_activation_fn
+from autoencoders.optimizers.optimizer_utils import Formulas, LayerShapeType, padding_fn, d_activation_fn
+from timeit import default_timer as timer
 
 
 class GradientSDC1:
@@ -137,6 +138,8 @@ class GradientSDC1:
 
     def run(self):
 
+        # start = timer()
+
         grads = self._grads
         y = self._y
         x = self._x
@@ -145,7 +148,7 @@ class GradientSDC1:
         prefix = self._prefix
         input_shape_type = self._input_shape_type
 
-        # If input shape type is CHWN trancpose it to NHWC
+        # If input shape type is CHWN transpose it to NHWC
         if input_shape_type == LayerShapeType.CHWN:
             x[0] = np.transpose(x[0], axes=[3, 1, 2, 0])
             x[1] = np.transpose(x[1], axes=[3, 1, 2, 0])
@@ -194,5 +197,8 @@ class GradientSDC1:
                     grad_value = self.grad_biases_y(grads[grad_name], ye)
 
             grads_value[grads[grad_name]] = grad_value
+
+        # end = timer() - start
+        # print('gradient_custom: {:.3f}'.format(end))
 
         return grads_value
