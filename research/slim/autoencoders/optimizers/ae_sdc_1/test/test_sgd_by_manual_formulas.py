@@ -250,11 +250,11 @@ wx1 = weights_input_sdc_1
 biases_y0 = biases_output_sdc_0
 biases_x1 = biases_input_sdc_1
 
-max_step = 1000
+max_step = 1
 log_data = None
 activation_name = 'sigm'
-update = 'golovko'
-# update = 'hinton'
+# update = 'golovko'
+update = 'hinton'
 
 for step in range(max_step):
 

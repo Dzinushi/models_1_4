@@ -8,8 +8,11 @@ from autoencoders import ae_factory
 from collections import defaultdict
 from time import time
 from autoencoders.optimizers.ae_sdc_1.sgd import GradientDescentOptimizerSDC1
-from autoencoders.optimizers.ae_sdc_1.gradient import GradientSDC1
-from autoencoders.optimizers.optimizer_utils import layer_shape_type, Formulas
+from autoencoders.optimizers.ae_sdc_1.gradient import CustomGradientSDC1 as gradient_custom_cpu
+# from autoencoders.optimizers.ae_sdc_1.gradient_numpy import CustomGradientSDC1 as gradient_custom_cpu
+from autoencoders.optimizers.optimizer_utils import Formulas
+from datetime import datetime, timedelta
+
 
 tf.app.flags.DEFINE_string('ae_name', None,
                            'Autoencoder model name (See slim/autoencoders/)')
@@ -36,7 +39,7 @@ tf.app.flags.DEFINE_integer(
     'The frequency with which summaries are saved, in seconds.')
 
 tf.app.flags.DEFINE_integer(
-    'save_interval_secs', 600,
+    'save_every_step', None,
     'The frequency with which the model is saved, in seconds.')
 
 ######################
@@ -121,6 +124,9 @@ tf.app.flags.DEFINE_integer(
 
 tf.app.flags.DEFINE_integer(
     'batch_size', 50, 'The number of samples in each batch.')
+
+tf.app.flags.DEFINE_string(
+    'activation', 'relu', 'Activation function')
 
 tf.app.flags.DEFINE_string(
     'checkpoint_path', None,
@@ -237,10 +243,17 @@ def load_vars_from_path(model_path):
         return list_pretrained_vars
 
 
+activation_dic = {'relu': tf.nn.relu,
+                  'leakyrelu': tf.nn.leaky_relu,
+                  'sigmoid': tf.nn.sigmoid,
+                  'tanh': tf.nn.tanh}
+
+
 def main(_):
     logdir_fn = lambda block_number: FLAGS.train_dir + '/train_block_{}/'.format(block_number)
 
     sdc_num = 1
+    full_train_time = 0
     list_assign = None
     ############################
     # Select autoencoder model #
@@ -264,8 +277,10 @@ def main(_):
             batch_per_ep = dataset.num_samples // FLAGS.batch_size
 
             # Get model data
-            ae_outputs, end_points, pad, stride = autoencoder_fn(images, train_block_num=train_block_number,
-                                                                 sdc_num=sdc_num)
+            ae_outputs, end_points, pad, stride = autoencoder_fn(images,
+                                                                 train_block_num=train_block_number,
+                                                                 sdc_num=sdc_num,
+                                                                 activation_fn=activation_dic[FLAGS.activation])
 
             if train_block_number > 0:
                 checkpoint_path = tf.train.latest_checkpoint(logdir_fn(train_block_number - 1))
@@ -274,13 +289,14 @@ def main(_):
 
             # =================================================================================================
             # LOSS
+            # Calc as sum((x0 - x1)^2) + sum((y0-y1)^2) / batch_size / (image_size)^2
             # =================================================================================================
             loss_map = autoencoder_loss_map_fn(end_points, train_block_num=train_block_number, sdc_num=sdc_num)
             assert len(loss_map) == 2
             loss_list = []
             for loss in loss_map:
                 loss_list.append(tf.reduce_sum(tf.square(loss_map[loss]['input'] - loss_map[loss]['output'])))
-            loss_op = tf.divide(loss_list[0] + loss_list[1], tf.constant(2.0))
+            loss_op = tf.divide((loss_list[0] + loss_list[1]), tf.constant(2.0) * FLAGS.batch_size * pow(image_size, 2))
             tf.losses.add_loss(loss_op)
             # loss_op = tf.losses.get_total_loss()
 
@@ -327,7 +343,6 @@ def main(_):
         # USER PARAMS for custom gradient
         ###########################################################################################
         # If input_sdc_1 is recovered first input layer, it's shape = (NHWC),  else = (HWCN)
-        input_shape_type = layer_shape_type(loss_map[0]['input'])
         activation_name = str.lower(loss_map[0]['output'].name.split('/')[-1].split(':')[0])
         if activation_name == 'maximum':
             activation_name = str.lower(loss_map[0]['output'].name.split('/')[2])
@@ -337,6 +352,8 @@ def main(_):
                                  save_model_secs=100000000,
                                  summary_op=summary_op,
                                  graph=graph)
+
+        checkpoint_path = logdir_fn(train_block_number) + 'model.ckpt'
 
         with sv.managed_session() as sess:
             # Initialize pretrained variables values
@@ -355,14 +372,21 @@ def main(_):
                 y = sess.run([loss_map[1]['input'], loss_map[1]['output']])
 
                 # Create custom gradient for autoencoder_sdc_1
-                grad_custom = GradientSDC1(grads=grad,
-                                           x=x,
-                                           y=y,
-                                           stride=stride,
-                                           padding=pad,
-                                           formulas=Formulas[FLAGS.formulas],
-                                           activation_name=activation_name,
-                                           input_shape_type=input_shape_type)
+                grad_custom = gradient_custom_cpu(grads=grad,
+                                                  x=x,
+                                                  y=y,
+                                                  stride=stride,
+                                                  padding=pad,
+                                                  formulas=Formulas[FLAGS.formulas],
+                                                  activation_name=activation_name)
+                # grad_custom = GradientSDC1(grads=grad,
+                #                            x=x,
+                #                            y=y,
+                #                            stride=stride,
+                #                            padding=pad,
+                #                            formulas=Formulas[FLAGS.formulas],
+                #                            activation_name=activation_name,
+                #                            input_shape_type=input_shape_type)
 
                 # Train autoencoder
                 loss = sess.run(train_op, feed_dict=grad_custom.run())
@@ -377,10 +401,26 @@ def main(_):
                             loss,
                             total_loss / (i + 1),
                             time_end - time_start))
+
+                full_train_time += time_end - time_start
                 global_step += 1
                 i += 1
-            checkpoint_path = logdir_fn(train_block_number) + 'model.ckpt'
+
+                if FLAGS.save_every_step is not None and global_step % FLAGS.save_every_step == 0:
+                    sv.saver.save(sess, save_path=checkpoint_path, global_step=global_step)
+
             sv.saver.save(sess, save_path=checkpoint_path, global_step=number_of_steps)
+
+    full_train_time = timedelta(seconds=full_train_time)
+    full_train_time = datetime(1,1,1) + full_train_time
+    if full_train_time.day - 1 != 0:
+        tf.logging.info('Full train time: %dd %dh %dm %ds', full_train_time.day-1, full_train_time.hour, full_train_time.minute, full_train_time.second)
+    elif full_train_time.hour != 0:
+        tf.logging.info('Full train time: %dh %dm %ds', full_train_time.hour, full_train_time.minute, full_train_time.second)
+    elif full_train_time.minute != 0:
+        tf.logging.info('Full train time: %dm %ds', full_train_time.minute, full_train_time.second)
+    else:
+        tf.logging.info('Full train time: %ds', full_train_time.second)
 
 
 if __name__ == '__main__':

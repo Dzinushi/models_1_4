@@ -191,6 +191,9 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_integer(
     'batch_size', 32, 'The number of samples in each batch.')
 
+tf.app.flags.DEFINE_string(
+    'activation', 'relu', 'Activation function. May be "relu", "leakyrelu", "sigmoid" or "tanh".')
+
 tf.app.flags.DEFINE_integer(
     'train_image_size', None, 'Train image size')
 
@@ -422,6 +425,12 @@ def load_vars_from_folder(folder_path):
     return list_pretrained_vars
 
 
+activation_dic = {'relu': tf.nn.relu,
+                  'leakyrelu': tf.nn.leaky_relu,
+                  'sigmoid': tf.nn.sigmoid,
+                  'tanh': tf.nn.tanh}
+
+
 def main(_):
     if not FLAGS.dataset_dir:
         raise ValueError('You must supply the dataset directory with --dataset_dir')
@@ -464,6 +473,7 @@ def main(_):
             FLAGS.model_name,
             num_classes=(dataset.num_classes - FLAGS.labels_offset),
             weight_decay=FLAGS.weight_decay,
+            activation=activation_dic[FLAGS.activation],
             is_training=True)
 
         #####################################

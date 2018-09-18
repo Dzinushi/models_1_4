@@ -2,19 +2,20 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.framework import ops
 from autoencoders.optimizers.ae_sdc_1.sgd import GradientDescentOptimizerSDC1 as sgd_custom
-from research.slim.autoencoders.optimizers.ae_sdc_1.gradient_numpy import GradientSDC1 as gradient_custom_cpu
-from research.slim.autoencoders.optimizers.ae_sdc_1.gradient import GradientSDC1 as gradient_custom_old_cpu
+from autoencoders.optimizers.ae_sdc_1.gradient import CustomGradientSDC1 as gradient_custom_cpu
+from autoencoders.optimizers.ae_sdc_1.gradient_old import GradientSDC1 as gradient_custom_old_cpu
 from tensorflow.contrib import slim
-from autoencoders.optimizers.optimizer_utils import Formulas, layer_shape_type
+from autoencoders.optimizers.optimizer_utils import Formulas
 from timeit import default_timer as timer
 
 max_step = 1000
 stride = 1
-padding = 'SAME'
+padding = 'VALID'
 formulas = Formulas.hinton
 activation_fn = tf.nn.tanh
 gradient_custom = gradient_custom_cpu
 alpha = 0.001
+log_step = 10
 
 
 # WARNING! first layer must have name 'input'. Recovery layer must have prefix 'recovery'.
@@ -132,10 +133,10 @@ def assign_weight_biases():
 
 # input_sdc_0 = np.matrix([[0.5, 0.6],
 #                          [0.4, 0.7]])
-input_sdc_0 = np.random.rand(300)
+input_sdc_0 = np.random.rand(2352)
 
 input = ops.convert_to_tensor(input_sdc_0, dtype=tf.float32, name='input_sdc_0')
-input = tf.reshape(input, shape=(1, 10, 10, 3))
+input = tf.reshape(input, shape=(1, 28, 28, 3))
 
 model_ae, end_points = model(input)
 
@@ -186,8 +187,6 @@ summary_op = tf.summary.merge(list(summaries), name='summary_op')
 ###########################################################################################
 # USER PARAMS for custom gradient
 ###########################################################################################
-# If input_sdc_1 is recovered first input layer, it's shape = (NHWC),  else = (HWCN)
-input_shape_type = layer_shape_type(end_points['input_sdc_1'])
 activation_name = str.lower(end_points['output_sdc_0'].name.split('/')[-1].split(':')[0])
 if activation_name == 'maximum':
     activation_name = str.lower(end_points['output_sdc_0'].name.split('/')[2])
@@ -223,8 +222,7 @@ with sv.managed_session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                                       stride=stride,
                                       padding=padding,
                                       formulas=formulas,
-                                      activation_name=activation_name,
-                                      input_shape_type=input_shape_type)
+                                      activation_name=activation_name)
         grad_values = grad_custom.run()
         timer_list.append(timer() - start)
 
@@ -233,13 +231,14 @@ with sv.managed_session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         cost = sess.run(train_op, feed_dict=grad_values)
         timer_list.append(timer() - start)
 
-        print(str(i + 1) + ') Loss: {:.5f}; "x" and "y": {:.3f}; grad_custom: {:.6f}; sess.run: {:.3f}'.format(cost,
-                                                                                                               timer_list[
-                                                                                                                   0],
-                                                                                                               timer_list[
-                                                                                                                   1],
-                                                                                                               timer_list[
-                                                                                                                   2]))
+        if (i + 1) % log_step == 0:
+            print(str(i + 1) + ') Loss: {:.5f}; "x" and "y": {:.3f}; grad_custom: {:.6f}; sess.run: {:.3f}'.format(cost,
+                                                                                                                   timer_list[
+                                                                                                                       0],
+                                                                                                                   timer_list[
+                                                                                                                       1],
+                                                                                                                   timer_list[
+                                                                                                                       2]))
         timer_list.clear()
 
         if (i + 1) % max_step + 1 == 0:

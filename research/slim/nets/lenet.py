@@ -82,11 +82,12 @@ def lenet(images, num_classes=10, is_training=False,
 lenet.default_image_size = 28
 
 
-def lenet_arg_scope(weight_decay=0.0):
+def lenet_arg_scope(weight_decay=0.0, activation=tf.nn.relu):
     """Defines the default lenet argument scope.
   
     Args:
       weight_decay: The weight decay to use for regularizing the model.
+      activation: Activation function
   
     Returns:
       An `arg_scope` to use for the inception v3 model.
@@ -95,5 +96,5 @@ def lenet_arg_scope(weight_decay=0.0):
             [slim.conv2d, slim.fully_connected],
             weights_regularizer=slim.l2_regularizer(weight_decay),
             weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
-            activation_fn=tf.nn.relu) as sc:
+            activation_fn=activation) as sc:
         return sc

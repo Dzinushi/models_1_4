@@ -1,13 +1,15 @@
-from autoencoders.lenet import lenet_bm
-from autoencoders.mobilenet_v1 import mobilenet_v1_bm
-from autoencoders.alexnet import alexnet_bm
+from autoencoders.nets_bm.lenet import lenet_bm
+from autoencoders.nets_bm.mobilenet_v1 import mobilenet_v1_bm
+from autoencoders.nets_bm.alexnet import alexnet_bm
 import functools
 
 ae_map = {'lenet_bm': lenet_bm.lenet_bm,
-          'alexnet_bm': alexnet_bm.alexnet_v2}
+          # 'alexnet_bm': alexnet_bm.alexnet_v2
+          }
 
 ae_loss_map = {'lenet_bm': lenet_bm.lenet_model_losses,
-               'alexnet_bm': alexnet_bm.alexnet_model_losses}
+               # 'alexnet_bm': alexnet_bm.alexnet_model_losses
+               }
 
 
 def get_ae_fn(name):

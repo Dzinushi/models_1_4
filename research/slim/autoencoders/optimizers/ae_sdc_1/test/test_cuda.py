@@ -3,6 +3,8 @@ from timeit import default_timer as timer
 # from numba import vectorize, jit, cuda
 import numpy as np
 from math import sqrt
+from research.slim.autoencoders.optimizers.optimizer_utils import d_act_dic
+from research.slim.autoencoders.optimizers.optimizer_utils import Formulas
 
 
 # CPU version
@@ -49,6 +51,7 @@ def weights_update(x0, x1, y0, y1, w_shape, stride):
                                              xe[q][i * stride + m][j * stride + n][c] * \
                                              y0[q][i][j][k] * d_act(x1[q][i * stride + m][j * stride + n][c]))
                         grad[m][n][c][k] = np.sum(w)
+        grad /= y_shape[1] * y_shape[2]
     elif len(y_shape) == 2:
 
         x0_temp = np.sum(x0, axis=0)
@@ -78,12 +81,12 @@ def weight_update_conv_np_stride_1(x0, x1, y0, y1, w_shape):
 
     for m in range(w_shape[0]):
         for n in range(w_shape[1]):
-            for c in range(w_shape[2]):
+            for q in range(w_shape[2]):
                 # Get part of x by w(m,n)
-                x0_temp = x0[:, m:y_shape[1] + m, n:y_shape[2] + n, c]
-                x1_temp = x1[:, m:y_shape[1] + m, n:y_shape[2] + n, c]
+                x0_temp = x0[:, m:y_shape[1] + m, n:y_shape[2] + n, q]
+                x1_temp = x1[:, m:y_shape[1] + m, n:y_shape[2] + n, q]
 
-                # Summary x by c (number of channel)
+                # Summary x by batch size
                 x0_temp = np.sum(x0_temp, axis=0)
                 x1_temp = np.sum(x1_temp, axis=0)
 
@@ -97,7 +100,10 @@ def weight_update_conv_np_stride_1(x0, x1, y0, y1, w_shape):
                 result = (x1_temp - x0_temp) * y0_temp * d_act(x1_temp) + \
                          (y1_temp - y0_temp) * x1_temp * d_act(y1_temp)
 
-                grad[m, n, c, :] = np.sum(result, axis=(0, 1))
+                grad[m, n, q, :] = np.sum(result, axis=(0, 1))
+
+    # WARNING! Need to append division by batch_size
+    grad /= y_shape[1] * y_shape[2]
     return grad
 
 
@@ -109,12 +115,12 @@ def weight_update_conv_np_stride_n(x0, x1, y0, y1, w_shape, stride):
 
     for m in range(w_shape[0]):
         for n in range(w_shape[1]):
-            for c in range(w_shape[2]):
+            for q in range(w_shape[2]):
                 # Get part of x by w(m,n)
-                x0_temp = x0[:, m::stride, n::stride, c]
+                x0_temp = x0[:, m::stride, n::stride, q]
                 x0_temp = x0_temp[:, :y_shape[1], :y_shape[2]]
 
-                x1_temp = x1[:, m::stride, n::stride, c]
+                x1_temp = x1[:, m::stride, n::stride, q]
                 x1_temp = x1_temp[:, :y_shape[1], :y_shape[2]]
 
                 # Summary x and y by q (batch number)
@@ -131,7 +137,10 @@ def weight_update_conv_np_stride_n(x0, x1, y0, y1, w_shape, stride):
                 result = (x1_temp - x0_temp) * y0_temp * d_act(x1_temp) + \
                          (y1_temp - y1_temp) * x1_temp * d_act(y1_temp)
 
-                grad[m, n, c, :] = np.sum(result, axis=(0, 1))
+                grad[m, n, q, :] = np.sum(result, axis=(0, 1))
+
+    # WARNING! Need to append division by batch_size
+    grad /= y_shape[1] * y_shape[2]
     return grad
 
 
@@ -186,6 +195,7 @@ def grad_bias(x, y, stride, d_act, grads, grad_name, prefix):
                            x1=x[1],
                            y_shape=y[0].shape,
                            w_shape=w_shape,
+                           bias_shape=grads[grad_name].shape.as_list(),
                            stride=stride,
                            d_act=d_act)
     else:
@@ -197,72 +207,49 @@ def grad_bias(x, y, stride, d_act, grads, grad_name, prefix):
         return grad_bias_y(y0=y[0],
                            y1=y[1],
                            w_shape=w_shape,
+                           bias_shape=grads[grad_name].shape.as_list(),
                            d_act=d_act)
 
 
-def grad_bias_x(x0, x1, y_shape, w_shape, stride, d_act):
-    grad = np.zeros(w_shape[-1], np.float32)
+def grad_bias_x(x0, x1, y_shape, w_shape, bias_shape, stride, d_act):
+    grad = np.zeros(bias_shape, np.float32)
 
     # For convolutional layer
     if len(w_shape) == 4:
         for m in range(w_shape[0]):
             for n in range(w_shape[1]):
-                for c in range(w_shape[2]):
-                    # Get part of x by w(m,n)
-                    x0_temp = x0[:, m::stride, n::stride, c]
-                    x0_temp = x0_temp[:, :y_shape[1], :y_shape[2]]
+                # Get part of x by w(m,n)
+                x0_temp = x0[:, m::stride, n::stride, :]
+                x0_temp = x0_temp[:, :y_shape[1], :y_shape[2]]
 
-                    x1_temp = x1[:, m::stride, n::stride, c]
-                    x1_temp = x1_temp[:, :y_shape[1], :y_shape[2]]
+                x1_temp = x1[:, m::stride, n::stride, :]
+                x1_temp = x1_temp[:, :y_shape[1], :y_shape[2]]
 
-                    # Summary x by c (number of channel)
-                    x0_temp = np.sum(x0_temp, axis=0)
-                    x1_temp = np.sum(x1_temp, axis=0)
-
-                    result = (x1_temp - x0_temp) * d_act(x1_temp)
-
-                    grad[:] += np.sum(result, axis=(0, 1))
+                # We will get result with shape=(batch_size, y_height, y_width, x_maps_count). 'x_maps_count' it is 'q'
+                result = (x1_temp - x0_temp) * d_act(x1_temp)
+                grad[:] += np.sum(result)
+        grad /= y_shape[1] * y_shape[2]
     elif len(w_shape) == 2:
-        x0_temp = np.sum(x0, axis=0)
-        x1_temp = np.sum(x1, axis=0)
-        grad[:] = (x1_temp - x0_temp) * d_act(x1_temp)
+        result = (x1 - x0) * d_act(x1)
+        grad[:] = np.sum(result, axis=0)
     else:
         raise ValueError('Weights shape is {}. Must be 2d or 4d'.format(w_shape))
 
     return grad
-    # # Convolution layers
-    # if len(x_shape) == 4:
-    #     for q in range(x_shape[0]):
-    #         t = []
-    #         for c in range(x_shape[3]):
-    #             for m in range(w_shape[0]):
-    #                 for n in range(w_shape[1]):
-    #                     for i in range(y_shape[0]):
-    #                         for j in range(y_shape[1]):
-    #                             t.append(xe[q][i * stride + m][j * stride + n][c] * \
-    #                                      d_act(x[1][q][i * stride + m][j * stride + n][c]))
-    #         grad_value[q] = np.sum(t)
-    #
-    # # Full connections layers: k = q = batch_size
-    # else:
-    #     for k in range(x_shape[0]):
-    #         for i in range(x_shape[1]):
-    #             grad_value[i] = xe[k][i] * d_act(x[1][k][i])
-    #
-    # return grad_value
 
 
-def grad_bias_y(y0, y1, w_shape, d_act):
+def grad_bias_y(y0, y1, w_shape, bias_shape, d_act):
+    grad = np.zeros(bias_shape, dtype=np.float32)
+    y_shape = y0.shape
 
-    grad = np.zeros(w_shape[-1], dtype=np.float32)
-    y0_temp = np.sum(y0, axis=0)
-    y1_temp = np.sum(y1, axis=0)
+    # We will get result with shape=(batch_size, y_height, y_width, y_maps_count). 'y_maps_count' it is 'k'
+    result = (y1 - y0) * d_act(y1)
 
     if len(w_shape) == 4:
-        result = (y1_temp - y0_temp) * d_act(y1_temp)
-        grad[:] = np.sum(result, axis=(0, 1))
+        grad[:] += np.sum(result)
+        grad /= y_shape[1] * y_shape[2]
     elif len(w_shape) == 2:
-        grad[:] = (y1_temp - y0_temp) * d_act(y1_temp)
+        grad[:] = np.sum(result, axis=0)
     else:
         raise ValueError('Weights shape is {}. Must be 2d or 4d'.format(w_shape))
 
@@ -274,66 +261,83 @@ def array_norm(array, norm_value):
         array[i] = array[i] / norm_value
 
 
+class TensorShape:
+    def __init__(self, shape):
+        self.shape = shape
+
+    def as_list(self):
+        return self.shape
+
+
+class Shape:
+    def __init__(self, shape):
+        self.shape = TensorShape(shape)
+
+
 def main():
-    # x_size = 48
-    # y_size = 16
-    # x_channel = 3
-    # batch_size = 10
-    # y_output = 32
-    #
-    # w_shape = [3, 3, x_channel, y_output]
-    #
-    # x_side = int(sqrt(x_size / x_channel))
-    # y_side = int(sqrt(y_size / y_output))
-    #
-    # x0 = np.arange(x_size, dtype=np.float32)
-    # x1 = np.arange(x_size, dtype=np.float32)
-    #
-    # array_norm(x0, norm_value=len(x0) + 1.0)
-    # array_norm(x1, norm_value=2 * len(x1) + 1.0)
-    #
-    # x0.resize(batch_size, x_side, x_side, x_channel)
-    # x1.resize(batch_size, x_side, x_side, x_channel)
-    #
-    # y0 = np.arange(y_size)
-    # y1 = np.arange(y_size)
-    #
-    # array_norm(y0, norm_value=len(y0) + 1.0)
-    # array_norm(y1, norm_value=2 * len(y1) + 1.0)
-    #
-    # y0.resize(batch_size, y_side, y_side, y_output)
-    # y1.resize(batch_size, y_side, y_side, y_output)
-
-    x_size = 5
-    y_size = 3
+    x_size = 27
+    y_size = 24
+    x_channel = 3
     batch_size = 1
+    y_output = 6
+    formulas = Formulas.hinton
+    act_name = 'relu'
 
-    w_shape = [x_size, y_size]
+    d_act = d_act_dic[act_name] if formulas == Formulas.golovko else lambda var: 1.0
+
+    w_shape = [2, 2, x_channel, y_output]
+
+    x_side = int(sqrt(x_size / x_channel))
+    y_side = int(sqrt(y_size / y_output))
 
     x0 = np.arange(x_size, dtype=np.float32)
     x1 = np.arange(x_size, dtype=np.float32)
 
-    y0 = np.arange(y_size, dtype=np.float32)
-    y1 = np.arange(y_size, dtype=np.float32)
-
     array_norm(x0, norm_value=len(x0) + 1.0)
     array_norm(x1, norm_value=2 * len(x1) + 1.0)
+
+    x0 = x0.reshape(batch_size, x_side, x_side, x_channel)
+    x1 = x1.reshape(batch_size, x_side, x_side, x_channel)
+
+    y0 = np.arange(y_size, dtype=np.float32)
+    y1 = np.arange(y_size, dtype=np.float32)
 
     array_norm(y0, norm_value=len(y0) + 1.0)
     array_norm(y1, norm_value=2 * len(y1) + 1.0)
 
-    x0.resize(batch_size, x_size)
-    x1.resize(batch_size, x_size)
+    y0 = y0.reshape(batch_size, y_side, y_side, y_output)
+    y1 = y1.reshape(batch_size, y_side, y_side, y_output)
 
-    y0.resize(batch_size, y_size)
-    y1.resize(batch_size, y_size)
+    # x_size = 5
+    # y_size = 3
+    # batch_size = 1
+    #
+    # w_shape = [x_size, y_size]
+    #
+    # x0 = np.arange(x_size, dtype=np.float32)
+    # x1 = np.arange(x_size, dtype=np.float32)
+    #
+    # y0 = np.arange(y_size, dtype=np.float32)
+    # y1 = np.arange(y_size, dtype=np.float32)
+    #
+    # array_norm(x0, norm_value=len(x0) + 1.0)
+    # array_norm(x1, norm_value=2 * len(x1) + 1.0)
+    #
+    # array_norm(y0, norm_value=len(y0) + 1.0)
+    # array_norm(y1, norm_value=2 * len(y1) + 1.0)
+    #
+    # x0.resize(batch_size, x_size)
+    # x1.resize(batch_size, x_size)
+    #
+    # y0.resize(batch_size, y_size)
+    # y1.resize(batch_size, y_size)
 
     # x0 = np.array([0.1, 0.2, 0.3])
     # x1 = np.array([0.11, 0.22, 0.33])
     #
     # y0 = np.array([0.2, 0.4, 0.6])
     # y1 = np.array([0.22, 0.44, 0.66])
-
+    #
     # x0 = np.array([[0.5, 0.6],
     #                [0.4, 0.7]])
     #
@@ -352,21 +356,46 @@ def main():
     # y1 = np.resize(y1, new_shape=(1, 1, 1, 2))
     # w_shape = [2, 2, 1, 2]
 
+    conv1_weights = Shape(w_shape)
+    conv1_biases = Shape([conv1_weights.shape.as_list()[-1]])
+
+    input_recovery_weights = Shape(w_shape)
+    input_recovery_biases = Shape([input_recovery_weights.shape.as_list()[-2]])
+
+    grads = {'Model/conv1/weights:0': conv1_weights,
+             'Model/conv1/biases:0': conv1_biases,
+             'Model/input_recovery/weights:0': input_recovery_weights,
+             'Model/input_recovery/biases:0': input_recovery_biases}
+
     start_normal = timer()
-    grad_normal = weights_update(x0, x1, y0, y1, w_shape, stride=1)
+    # grad_normal = weights_update(x0, x1, y0, y1, w_shape, stride=1)
     end_normal = timer() - start_normal
 
     start_np = timer()
-    grad_np = weight_update_np(x0, x1, y0, y1, w_shape, stride=1)
+    # grad_np = weight_update_np(x0, x1, y0, y1, w_shape, stride=1)
+    grad_bias([x0, x1],
+              [y0, y1],
+              stride=1,
+              d_act=d_act,
+              grads=grads,
+              grad_name='Model/input_recovery/biases:0',
+              prefix='recovery')
+    grad_bias([x0, x1],
+              [y0, y1],
+              stride=1,
+              d_act=d_act,
+              grads=grads,
+              grad_name='Model/conv1/biases:0',
+              prefix='recovery')
     end_np = timer() - start_np
 
-    print(grad_normal)
-    print(grad_np)
+    # print(grad_normal)
+    # print(grad_np)
     print('function_normal %f seconds: ' % end_normal)
     print('function_np %f seconds: ' % end_np)
 
     print('normal / np:  %f' % (end_normal / end_np))
-    print("grad_normal == grad_np: {}".format(np.equal(grad_normal, grad_np)))
+    # print("grad_normal == grad_np: {}".format(np.equal(grad_normal, grad_np)))
 
 
 if __name__ == '__main__':

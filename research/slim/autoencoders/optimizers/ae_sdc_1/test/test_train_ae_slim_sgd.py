@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.framework import ops
 from research.slim.autoencoders.optimizers.ae_sdc_1.sgd import GradientDescentOptimizerSDC1
-from research.slim.autoencoders.optimizers.ae_sdc_1.gradient import GradientSDC1
+from research.slim.autoencoders.optimizers.ae_sdc_1.gradient_old import GradientSDC1
 from tensorflow.contrib import slim
 from research.slim.autoencoders.optimizers.optimizer_utils import Formulas, layer_shape_type
 from research.slim.autoencoders.optimizers.ae_sdc_1.test.simple_model_bm import simple_model_bm, simple_model_losses
