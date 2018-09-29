@@ -9,10 +9,11 @@ from collections import defaultdict
 from time import time
 from autoencoders.optimizers.ae_sdc_1.sgd import GradientDescentOptimizerSDC1
 from autoencoders.optimizers.ae_sdc_1.gradient import CustomGradientSDC1 as gradient_custom_cpu
-# from autoencoders.optimizers.ae_sdc_1.gradient_numpy import CustomGradientSDC1 as gradient_custom_cpu
 from autoencoders.optimizers.optimizer_utils import Formulas
 from datetime import datetime, timedelta
-
+import numpy as np
+import os
+from autoencoders.dataset_np.db_np_flowers import DatabaseFlowers, Table
 
 tf.app.flags.DEFINE_string('ae_name', None,
                            'Autoencoder model name (See slim/autoencoders/)')
@@ -163,8 +164,9 @@ def load_batch(dataset, batch_size, height=224, width=224, is_training=True):
         num_threads=4,
         capacity=5 * batch_size)
     labels = slim.one_hot_encoding(labels, dataset.num_classes)
-
-    return images, labels
+    batch_queue = slim.prefetch_queue.prefetch_queue(
+        [images, labels], capacity=2)
+    return batch_queue
 
 
 def _configure_optimizer(learning_rate):
@@ -243,6 +245,13 @@ def load_vars_from_path(model_path):
         return list_pretrained_vars
 
 
+def get_session(sess):
+    session = sess
+    while type(session).__name__ != 'Session':
+        session = session._sess
+    return session
+
+
 activation_dic = {'relu': tf.nn.relu,
                   'leakyrelu': tf.nn.leaky_relu,
                   'sigmoid': tf.nn.sigmoid,
@@ -255,32 +264,53 @@ def main(_):
     sdc_num = 1
     full_train_time = 0
     list_assign = None
-    ############################
+
+    # =================================================================================================
     # Select autoencoder model #
-    ############################
+    # =================================================================================================
+
     autoencoder_fn, autoencoder_loss_map_fn = ae_factory.get_ae_fn(FLAGS.ae_name)
     block_count = autoencoder_fn.block_number
 
     for train_block_number in range(block_count):
         with tf.Graph().as_default() as graph:
             tf.logging.set_verbosity(tf.logging.INFO)
-            ######################
-            # Select the dataset #
-            ######################
-            dataset = dataset_factory.get_dataset(
-                FLAGS.dataset_name, FLAGS.dataset_split_name, FLAGS.dataset_dir)
 
-            image_size = autoencoder_fn.default_image_size
-            images, labels = load_batch(dataset, FLAGS.batch_size, image_size, image_size, is_training=True)
+            # =================================================================================================
+            # Dataset settings #
+            # =================================================================================================
+
+            dataset = DatabaseFlowers(FLAGS.dataset_dir)
+            table = Table.flowers_train
+
+            # Set dataset using dataset factory
+            # dataset = dataset_factory.get_dataset(
+            #     FLAGS.dataset_name, FLAGS.dataset_split_name, FLAGS.dataset_dir)
+
+            # Get images and labels from dataset by auto batch queue
+            # image_size = autoencoder_fn.default_image_size
+            # batch_queue = load_batch(dataset, FLAGS.batch_size, image_size, image_size, is_training=True)
+            # images, labels = batch_queue.dequeue()
 
             # calculate the number of batches per epoch
-            batch_per_ep = dataset.num_samples // FLAGS.batch_size
+            batch_per_ep = dataset.num_samples['train'] // FLAGS.batch_size
+
+            # images = np.random.rand(1,28,28,3)
+            # images = np.array(images, dtype=np.float32)
 
             # Get model data
-            ae_outputs, end_points, pad, stride = autoencoder_fn(images,
+            images_size = autoencoder_fn.default_image_size
+            images_shape = (FLAGS.batch_size, images_size, images_size, 3)
+            images_placeholder = tf.placeholder(tf.float32, shape=images_shape, name='input_image')
+
+            ae_outputs, end_points, pad, stride = autoencoder_fn(images_placeholder,
                                                                  train_block_num=train_block_number,
                                                                  sdc_num=sdc_num,
                                                                  activation_fn=activation_dic[FLAGS.activation])
+
+            # =================================================================================================
+            # Assign data from trained layers #
+            # =================================================================================================
 
             if train_block_number > 0:
                 checkpoint_path = tf.train.latest_checkpoint(logdir_fn(train_block_number - 1))
@@ -289,26 +319,39 @@ def main(_):
 
             # =================================================================================================
             # LOSS
-            # Calc as sum((x0 - x1)^2) + sum((y0-y1)^2) / batch_size / (image_size)^2
             # =================================================================================================
+
+            # Get loss_map
             loss_map = autoencoder_loss_map_fn(end_points, train_block_num=train_block_number, sdc_num=sdc_num)
+
             assert len(loss_map) == 2
+
+            # Calc as sum((x0 - x1)^2) + sum((y0-y1)^2) / batch_size / (image_size)^2
             loss_list = []
             for loss in loss_map:
-                loss_list.append(tf.reduce_sum(tf.square(loss_map[loss]['input'] - loss_map[loss]['output'])))
-            loss_op = tf.divide((loss_list[0] + loss_list[1]), tf.constant(2.0) * FLAGS.batch_size * pow(image_size, 2))
+                loss_list.append(tf.reduce_mean(tf.square(loss_map[loss]['input'] - loss_map[loss]['output'])))
+
+            # loss_op = tf.divide((loss_list[0] + loss_list[1]), tf.constant(2.0) * FLAGS.batch_size * pow(image_size, 2))
+            loss_op = loss_list[0] + loss_list[1]
             tf.losses.add_loss(loss_op)
-            # loss_op = tf.losses.get_total_loss()
+
+            # =================================================================================================
+            # Optimizer
+            # =================================================================================================
 
             # Create custom gradient for SDC1
             grad = {}
             for var in tf.trainable_variables():
                 grad[var.name] = tf.placeholder(tf.float32, shape=var.shape, name=var._shared_name + '_grad')
 
-            # optimizer = _configure_optimizer(FLAGS.learning_rate)
-            optimizer = GradientDescentOptimizerSDC1(grad, FLAGS.learning_rate)
+            # optimizer = GradientDescentOptimizerSDC1(grad, FLAGS.learning_rate)
+            optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
 
             train_op = slim.learning.create_train_op(loss_op, optimizer)
+
+            # =================================================================================================
+            # Summaries
+            # =================================================================================================
 
             # Gather initial summaries.
             summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
@@ -320,16 +363,16 @@ def main(_):
                 summaries.add(tf.summary.scalar('sparsity/' + end_point,
                                                 tf.nn.zero_fraction(x)))
 
-            # # Add summaries for losses.
-            # for loss in tf.get_collection(tf.GraphKeys.LOSSES):
-            #     summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
+            # Add summaries for losses.
+            for loss in tf.get_collection(tf.GraphKeys.LOSSES):
+                summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
 
             # Add summaries for variables.
             for variable in slim.get_model_variables():
                 summaries.add(tf.summary.histogram(variable.op.name, variable))
 
             # Add total_loss to summary.
-            summaries.add(tf.summary.scalar('total_loss', loss_op))
+            # summaries.add(tf.summary.scalar('total_loss', loss_op))
 
             # Merge all summaries together.
             summary_op = tf.summary.merge(list(summaries), name='summary_op')
@@ -339,84 +382,100 @@ def main(_):
             else:
                 number_of_steps = batch_per_ep * FLAGS.num_epoch
 
-        ###########################################################################################
-        # USER PARAMS for custom gradient
-        ###########################################################################################
-        # If input_sdc_1 is recovered first input layer, it's shape = (NHWC),  else = (HWCN)
-        activation_name = str.lower(loss_map[0]['output'].name.split('/')[-1].split(':')[0])
-        if activation_name == 'maximum':
-            activation_name = str.lower(loss_map[0]['output'].name.split('/')[2])
+            # =================================================================================================
+            # USER PARAMS for custom gradient
+            # =================================================================================================
 
-        # Create session using Supervisor
-        sv = tf.train.Supervisor(logdir=logdir_fn(train_block_number),
-                                 save_model_secs=100000000,
-                                 summary_op=summary_op,
-                                 graph=graph)
+            # If input_sdc_1 is recovered first input layer, it's shape = (NHWC),  else = (HWCN)
+            activation_name = str.lower(loss_map[0]['output'].name.split('/')[-1].split(':')[0])
+            if activation_name == 'maximum':
+                activation_name = str.lower(loss_map[0]['output'].name.split('/')[2])
 
-        checkpoint_path = logdir_fn(train_block_number) + 'model.ckpt'
+            global_step = tf.train.get_global_step()
 
-        with sv.managed_session() as sess:
-            # Initialize pretrained variables values
-            if list_assign is not None:
-                sess.run(list_assign)
-                tf.logging.info('Autoencoder pretrained variables successfully recovered!')
-            total_loss = 0.0
-            global_step = sess.run(sv.global_step)
-            i = 0
-            while global_step < number_of_steps:
+            # =================================================================================================
+            # Session
+            # =================================================================================================
 
-                time_start = time()
+            saver = tf.train.Saver()
+            checkpoint_path = logdir_fn(train_block_number) + 'model.ckpt'
+            if not os.path.exists(logdir_fn(train_block_number)):
+                os.makedirs(logdir_fn(train_block_number))
 
-                # Calc custom gradient
-                x = sess.run([loss_map[0]['input'], loss_map[0]['output']])
-                y = sess.run([loss_map[1]['input'], loss_map[1]['output']])
+            # Create session
+            session = tf.train.MonitoredTrainingSession(save_summaries_secs=100000000,
+                                                        checkpoint_dir=logdir_fn(train_block_number))
 
-                # Create custom gradient for autoencoder_sdc_1
-                grad_custom = gradient_custom_cpu(grads=grad,
-                                                  x=x,
-                                                  y=y,
-                                                  stride=stride,
-                                                  padding=pad,
-                                                  formulas=Formulas[FLAGS.formulas],
-                                                  activation_name=activation_name)
-                # grad_custom = GradientSDC1(grads=grad,
-                #                            x=x,
-                #                            y=y,
-                #                            stride=stride,
-                #                            padding=pad,
-                #                            formulas=Formulas[FLAGS.formulas],
-                #                            activation_name=activation_name,
-                #                            input_shape_type=input_shape_type)
+            # Save block N graph
+            tf.train.write_graph(get_session(session).graph, logdir_fn(train_block_number), 'graph.pbtxt')
 
-                # Train autoencoder
-                loss = sess.run(train_op, feed_dict=grad_custom.run())
-                time_end = time()
+            with session._tf_sess() as sess:
 
-                total_loss += loss
-                if (global_step + 1) % FLAGS.log_every_n_steps == 0:
-                    tf.logging.info(
-                        'Block: {}, Step: {}, loss: {:.5f}, total_loss: {:.5f} ({:.3f} sec/step)'.format(
-                            train_block_number,
-                            global_step + 1,
-                            loss,
-                            total_loss / (i + 1),
-                            time_end - time_start))
+                # Initialize pretrained variables values
+                if list_assign is not None:
+                    sess.run(list_assign)
+                    tf.logging.info('Autoencoder pretrained variables successfully recovered!')
 
-                full_train_time += time_end - time_start
-                global_step += 1
-                i += 1
+                total_loss = 0.0
+                i = 0
+                while global_step.eval(session=sess) < number_of_steps:
 
-                if FLAGS.save_every_step is not None and global_step % FLAGS.save_every_step == 0:
-                    sv.saver.save(sess, save_path=checkpoint_path, global_step=global_step)
+                    time_start = time()
 
-            sv.saver.save(sess, save_path=checkpoint_path, global_step=number_of_steps)
+                    # # Get images for training
+                    images_batch = dataset.select_batch_by_index(table,
+                                                                 index=global_step.eval(session=sess) % dataset.num_samples['train'] + 1,
+                                                                 batch_size=FLAGS.batch_size)
+                    image_db_time = time() - time_start
+
+                    # Calc custom gradient
+                    x, y = sess.run([[loss_map[0]['input'], loss_map[0]['output']],
+                                     [loss_map[1]['input'], loss_map[1]['output']]],
+                                    feed_dict={images_placeholder: images_batch})
+
+                    # Create custom gradient for autoencoder_sdc_1
+                    grad_custom = gradient_custom_cpu(grads=grad,
+                                                      x=x,
+                                                      y=y,
+                                                      stride=stride,
+                                                      padding=pad,
+                                                      formulas=Formulas[FLAGS.formulas],
+                                                      activation_name=activation_name)
+
+                    # Train autoencoder
+                    feed_dict = grad_custom.run()
+                    feed_dict[images_placeholder.name] = images_batch
+                    loss = sess.run(train_op, feed_dict=feed_dict)
+                    time_end = time()
+
+                    total_loss += loss
+                    if (global_step.eval(session=sess) + 1) % FLAGS.log_every_n_steps == 0:
+                        tf.logging.info(
+                            'Block: {}, Image from db: {:.3f} sec/batch, Step: {}, loss: {:.5f}, total_loss: {:.5f} ({:.3f} sec/step)'.format(
+                                train_block_number,
+                                image_db_time,
+                                global_step.eval(session=sess) + 1,
+                                loss,
+                                total_loss / (i + 1),
+                                time_end - time_start))
+
+                    full_train_time += time_end - time_start
+                    i += 1
+
+                    if FLAGS.save_every_step is not None \
+                            and global_step.eval(session=sess) % FLAGS.save_every_step == 0:
+                        saver.save(get_session(sess), save_path=checkpoint_path, global_step=global_step)
+
+                saver.save(get_session(sess), save_path=checkpoint_path, global_step=number_of_steps)
 
     full_train_time = timedelta(seconds=full_train_time)
-    full_train_time = datetime(1,1,1) + full_train_time
+    full_train_time = datetime(1, 1, 1) + full_train_time
     if full_train_time.day - 1 != 0:
-        tf.logging.info('Full train time: %dd %dh %dm %ds', full_train_time.day-1, full_train_time.hour, full_train_time.minute, full_train_time.second)
+        tf.logging.info('Full train time: %dd %dh %dm %ds', full_train_time.day - 1, full_train_time.hour,
+                        full_train_time.minute, full_train_time.second)
     elif full_train_time.hour != 0:
-        tf.logging.info('Full train time: %dh %dm %ds', full_train_time.hour, full_train_time.minute, full_train_time.second)
+        tf.logging.info('Full train time: %dh %dm %ds', full_train_time.hour, full_train_time.minute,
+                        full_train_time.second)
     elif full_train_time.minute != 0:
         tf.logging.info('Full train time: %dm %ds', full_train_time.minute, full_train_time.second)
     else:

@@ -451,7 +451,7 @@ class ObjectDetectionEvaluation(object):
         """
         if image_key in self.groundtruth_boxes:
             logging.warn(
-                'image %s has already been added to the ground truth database.',
+                'image %s has already been added to the ground truth dataset_np.',
                 image_key)
             return
 
@@ -500,7 +500,7 @@ class ObjectDetectionEvaluation(object):
 
         if image_key in self.detection_keys:
             logging.warn(
-                'image %s has already been added to the detection result database',
+                'image %s has already been added to the detection result dataset_np',
                 image_key)
             return
 

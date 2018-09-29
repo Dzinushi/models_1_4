@@ -4,11 +4,11 @@ from autoencoders.nets_bm.alexnet import alexnet_bm
 import functools
 
 ae_map = {'lenet_bm': lenet_bm.lenet_bm,
-          # 'alexnet_bm': alexnet_bm.alexnet_v2
+          'alexnet_bm': alexnet_bm.alexnet_v2
           }
 
 ae_loss_map = {'lenet_bm': lenet_bm.lenet_model_losses,
-               # 'alexnet_bm': alexnet_bm.alexnet_model_losses
+               'alexnet_bm': alexnet_bm.alexnet_model_losses
                }
 
 
