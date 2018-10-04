@@ -1,11 +1,21 @@
 import numpy as np
+from numba import jit, double
 
 # w_shape=(HWQK)
 # x_shape=(NHWQ)
 # y_shape=(NHWK)
 
 
-def grad_bias_x(x0, x1, y_shape, w_shape, bias_shape, stride, d_act):
+d_act = lambda var: 1.0
+
+
+@jit(double[:](double[:, :, :, :],
+               double[:, :, :, :],
+               double[:, :, :, :],
+               double[:, :, :, :],
+               double,
+               double))
+def grad_bias_x(x0, x1, y_shape, w_shape, bias_shape, stride):
     grad = np.zeros(bias_shape, np.float32)
 
     # For convolutional layer
@@ -14,10 +24,10 @@ def grad_bias_x(x0, x1, y_shape, w_shape, bias_shape, stride, d_act):
             for n in range(w_shape[1]):
                 # Get part of x by w(m,n)
                 x0_temp = x0[:, m::stride, n::stride, :]
-                x0_temp = x0_temp[:, :y_shape[1], :y_shape[2], :]
+                x0_temp = x0_temp[:, :y_shape[1], :y_shape[2]]
 
                 x1_temp = x1[:, m::stride, n::stride, :]
-                x1_temp = x1_temp[:, :y_shape[1], :y_shape[2], :]
+                x1_temp = x1_temp[:, :y_shape[1], :y_shape[2]]
 
                 # We will get result with shape=(batch_size, y_height, y_width, x_maps_count). 'x_maps_count' it is 'q'
                 result = (x1_temp - x0_temp) * d_act(x1_temp)
@@ -38,7 +48,11 @@ def grad_bias_x(x0, x1, y_shape, w_shape, bias_shape, stride, d_act):
     return grad
 
 
-def grad_bias_y(y0, y1, w_shape, bias_shape, d_act):
+@jit(double[:](double[:, :, :, :],
+               double[:, :, :, :],
+               double[:, :, :, :],
+               double[:, :, :, :]))
+def grad_bias_y(y0, y1, w_shape, bias_shape):
     grad = np.zeros(bias_shape, dtype=np.float32)
     y_shape = y0.shape
 
@@ -61,7 +75,12 @@ def grad_bias_y(y0, y1, w_shape, bias_shape, d_act):
     return grad
 
 
-def grad_w_conv_stride_1(x0, x1, y0, y1, w_shape, d_act):
+@jit(double[:, :, :, :](double[:, :, :, :],
+                        double[:, :, :, :],
+                        double[:, :, :, :],
+                        double[:, :, :, :],
+                        double[:, :, :, :]))
+def grad_w_conv_stride_1(x0, x1, y0, y1, w_shape):
     grad = np.zeros(shape=w_shape)
     y_shape = y0.shape
 
@@ -93,7 +112,13 @@ def grad_w_conv_stride_1(x0, x1, y0, y1, w_shape, d_act):
     return grad
 
 
-def grad_w_conv_stride_n(x0, x1, y0, y1, w_shape, stride, d_act):
+@jit(double[:, :, :, :](double[:, :, :, :],
+                        double[:, :, :, :],
+                        double[:, :, :, :],
+                        double[:, :, :, :],
+                        double[:, :, :, :],
+                        double))
+def grad_w_conv_stride_n(x0, x1, y0, y1, w_shape, stride):
     grad = np.zeros(shape=w_shape)
     y_shape = y0.shape
 
@@ -128,7 +153,14 @@ def grad_w_conv_stride_n(x0, x1, y0, y1, w_shape, stride, d_act):
     return grad
 
 
-def grad_w_fc(x0, x1, y0, y1, w_shape, grad_name, prefix, d_act):
+# @jit(double[:, :, :, :](double[:, :, :, :],
+#                         double[:, :, :, :],
+#                         double[:, :, :, :],
+#                         double[:, :, :, :],
+#                         double[:, :, :, :],
+#                         string_nb,
+#                         string_nb))
+def grad_w_fc(x0, x1, y0, y1, w_shape, grad_name, prefix):
     grad = np.zeros(shape=w_shape)
 
     x0_temp = np.sum(x0, axis=0)

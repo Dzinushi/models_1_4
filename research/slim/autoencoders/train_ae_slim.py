@@ -7,8 +7,10 @@ from datasets import dataset_factory
 from autoencoders import ae_factory
 from collections import defaultdict
 from time import time
-from autoencoders.optimizers.ae_sdc_1.sgd import GradientDescentOptimizerSDC1
+# from autoencoders.optimizers.ae_sdc_1.sgd import GradientDescentOptimizerSDC1
+from autoencoders.optimizers.ae_sdc_1.sgd_v2 import GradientDescentOptimizerSDC1
 from autoencoders.optimizers.ae_sdc_1.gradient import CustomGradientSDC1 as gradient_custom_cpu
+# from autoencoders.optimizers.ae_sdc_1.gradient_gpu import CustomGradientSDC1 as gradient_custom_cpu
 from autoencoders.optimizers.optimizer_utils import Formulas
 from datetime import datetime, timedelta
 import numpy as np
@@ -142,6 +144,9 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_string(
     'dataset_dir', None, 'The directory where the dataset files are stored.')
 
+tf.app.flags.DEFINE_float(
+    'gpu_memory_fraction', 0.5, 'Gpu reservation for model calculation')
+
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -231,8 +236,8 @@ def init_fn(list_pretrained_vars):
 
 
 def load_vars_from_path(model_path):
+    list_assigned_vars = defaultdict(lambda: None)
     with tf.Graph().as_default():
-        list_pretrained_vars = defaultdict(lambda: None)
         sess_load = tf.Session()
         with sess_load:
             saver_load = tf.train.import_meta_graph(model_path + '.meta')
@@ -240,9 +245,9 @@ def load_vars_from_path(model_path):
             saver_load.restore(sess_load, tf.train.latest_checkpoint('/'.join(model_path.split('/')[:-1])))
             vars_load = sess_load.graph.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
             for var in vars_load:
-                list_pretrained_vars[var._shared_name] = var.eval()
+                list_assigned_vars[var._shared_name] = var.eval()
             tf.logging.info('Pretrained vars successfully loaded')
-        return list_pretrained_vars
+        return list_assigned_vars
 
 
 def get_session(sess):
@@ -263,7 +268,6 @@ def main(_):
 
     sdc_num = 1
     full_train_time = 0
-    list_assign = None
 
     # =================================================================================================
     # Select autoencoder model #
@@ -272,8 +276,11 @@ def main(_):
     autoencoder_fn, autoencoder_loss_map_fn = ae_factory.get_ae_fn(FLAGS.ae_name)
     block_count = autoencoder_fn.block_number
 
+    # Test data. Can be removed
+    # w_block = list(range(block_count))
+
     for train_block_number in range(block_count):
-        with tf.Graph().as_default() as graph:
+        with tf.Graph().as_default():
             tf.logging.set_verbosity(tf.logging.INFO)
 
             # =================================================================================================
@@ -312,10 +319,27 @@ def main(_):
             # Assign data from trained layers #
             # =================================================================================================
 
+            # Set x1 new weights as transposing x0 weights
+            x0_weights = None
+            list_assign_recovery_weights = None
+            list_assign_pretrained_vars = None
+            x1_weights = tf.placeholder(dtype=tf.float32)
+            train_vars = tf.trainable_variables()
+
+            for var in train_vars:
+                if var.name.find('weights:0') != -1:
+                    if var.name.find('recovery') != -1:
+                        list_assigned_vars = defaultdict(lambda: None)
+                        list_assigned_vars[var._shared_name] = x1_weights
+                        list_assign_recovery_weights = init_fn(list_assigned_vars)
+                    else:
+                        x0_weights = var
+
+            # Set pretrained variables from pretrained layers
             if train_block_number > 0:
                 checkpoint_path = tf.train.latest_checkpoint(logdir_fn(train_block_number - 1))
-                list_pretrained_vars = load_vars_from_path(checkpoint_path)
-                list_assign = init_fn(list_pretrained_vars)
+                list_assigned_vars = load_vars_from_path(checkpoint_path)
+                list_assign_pretrained_vars = init_fn(list_assigned_vars)
 
             # =================================================================================================
             # LOSS
@@ -332,7 +356,7 @@ def main(_):
                 loss_list.append(tf.reduce_mean(tf.square(loss_map[loss]['input'] - loss_map[loss]['output'])))
 
             # loss_op = tf.divide((loss_list[0] + loss_list[1]), tf.constant(2.0) * FLAGS.batch_size * pow(image_size, 2))
-            loss_op = loss_list[0] + loss_list[1]
+            loss_op = (loss_list[0] + loss_list[1]) / 2.0
             tf.losses.add_loss(loss_op)
 
             # =================================================================================================
@@ -344,8 +368,8 @@ def main(_):
             for var in tf.trainable_variables():
                 grad[var.name] = tf.placeholder(tf.float32, shape=var.shape, name=var._shared_name + '_grad')
 
-            # optimizer = GradientDescentOptimizerSDC1(grad, FLAGS.learning_rate)
-            optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
+            optimizer = GradientDescentOptimizerSDC1(grad, FLAGS.learning_rate)
+            # optimizer = tf.train.GradientDescentOptimizer(FLAGS.learning_rate)
 
             train_op = slim.learning.create_train_op(loss_op, optimizer)
 
@@ -402,30 +426,53 @@ def main(_):
             if not os.path.exists(logdir_fn(train_block_number)):
                 os.makedirs(logdir_fn(train_block_number))
 
+            config = tf.ConfigProto()
+            config.gpu_options.per_process_gpu_memory_fraction = FLAGS.gpu_memory_fraction
+
             # Create session
             session = tf.train.MonitoredTrainingSession(save_summaries_secs=100000000,
-                                                        checkpoint_dir=logdir_fn(train_block_number))
+                                                        checkpoint_dir=logdir_fn(train_block_number),
+                                                        config=config)
 
             # Save block N graph
             tf.train.write_graph(get_session(session).graph, logdir_fn(train_block_number), 'graph.pbtxt')
 
             with session._tf_sess() as sess:
 
-                # Initialize pretrained variables values
-                if list_assign is not None:
-                    sess.run(list_assign)
+                # Initialize recovery weights by transposed input weights
+                if global_step.eval(session=sess) == 0:
+                    # x_shape = x0_weights.shape.as_list()
+                    x0_weights_np = x0_weights.eval(session=sess)
+                    # x1_weights_np = np.zeros_like(x0_weights_np)
+
+                    # for q in range(x_shape[2]):
+                    #     for k in range(x_shape[3]):
+                    #         x1_weights_np[:, :, q, k] = np.transpose(x0_weights_np[:, :, q, k])
+                    if len(x0_weights_np.shape) != 2:
+                        sess.run(list_assign_recovery_weights, feed_dict={x1_weights: x0_weights_np})
+                    else:
+                        sess.run(list_assign_recovery_weights, feed_dict={x1_weights: np.transpose(x0_weights_np)})
+
+                # Initialize pretrained layers by pretrained variables
+                if list_assign_pretrained_vars is not None:
+                    sess.run(list_assign_pretrained_vars)
                     tf.logging.info('Autoencoder pretrained variables successfully recovered!')
 
                 total_loss = 0.0
                 i = 0
+                epoch_num = int(global_step.eval(session=sess) / batch_per_ep) + 1
+
+                next_index = lambda step: (step * FLAGS.batch_size) % dataset.num_samples['train'] + 1
+
                 while global_step.eval(session=sess) < number_of_steps:
 
-                    time_start = time()
-
                     # # Get images for training
-                    images_batch = dataset.select_batch_by_index(table,
-                                                                 index=global_step.eval(session=sess) % dataset.num_samples['train'] + 1,
-                                                                 batch_size=FLAGS.batch_size)
+                    # TODO: Check index
+                    time_start = time()
+                    index = next_index(global_step.eval(session=sess))
+                    images_batch = dataset.select_batch_img_by_index(table,
+                                                                     index=index,
+                                                                     batch_size=FLAGS.batch_size)
                     image_db_time = time() - time_start
 
                     # Calc custom gradient
@@ -448,25 +495,43 @@ def main(_):
                     loss = sess.run(train_op, feed_dict=feed_dict)
                     time_end = time()
 
+                    # For summary INFO
+                    if global_step.eval(session=sess) % batch_per_ep == 0:
+                        total_loss = 0.0
+                        epoch_num += 1
+
                     total_loss += loss
+
                     if (global_step.eval(session=sess) + 1) % FLAGS.log_every_n_steps == 0:
                         tf.logging.info(
-                            'Block: {}, Image from db: {:.3f} sec/batch, Step: {}, loss: {:.5f}, total_loss: {:.5f} ({:.3f} sec/step)'.format(
+                            'Block: {}, Image from db: {:.3f} sec/batch, Step: {} (epoch {}), loss: {:.5f}, total_loss: {:.5f} ({:.3f} sec/step)'.format(
                                 train_block_number,
                                 image_db_time,
                                 global_step.eval(session=sess) + 1,
+                                epoch_num,
                                 loss,
-                                total_loss / (i + 1),
+                                total_loss / ((global_step.eval(session=sess)) % batch_per_ep) + 1,
                                 time_end - time_start))
 
                     full_train_time += time_end - time_start
                     i += 1
 
+                    # Saver by step
                     if FLAGS.save_every_step is not None \
                             and global_step.eval(session=sess) % FLAGS.save_every_step == 0:
                         saver.save(get_session(sess), save_path=checkpoint_path, global_step=global_step)
 
+                    # Test data. Can be removed
+                    # all_vars = tf.all_variables()
+                    # w_vars = {}
+                    # for var in all_vars:
+                    #     if var.name.find('weights:0') != -1:
+                    #         w_vars[var.name] = var.eval(session=sess)
+                    # w_block[train_block_number] = w_vars
+
                 saver.save(get_session(sess), save_path=checkpoint_path, global_step=number_of_steps)
+
+        dataset.close()
 
     full_train_time = timedelta(seconds=full_train_time)
     full_train_time = datetime(1, 1, 1) + full_train_time

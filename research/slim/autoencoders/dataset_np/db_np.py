@@ -50,10 +50,38 @@ class DatabaseNumpy:
         images = self.cursor.fetchone()[0]
         return images
 
-    def select_batch_by_index(self, table_name, column_name, id, batch_size):
+    def select_batch_by_index(self, table_name, img_col, label_col, id, batch_size):
         list_id = list(range(id, batch_size+id))
         str_list_id = ', '.join(str(x) for x in list_id)
-        command = 'select {} from {} where id in ({})'.format(column_name, table_name, str_list_id)
+        command = 'select {}, {} from {} where id in ({})'.format(img_col, label_col, table_name, str_list_id)
+
+        data = self.cursor.execute(command)
+
+        # Get images from db
+        list_data = {'image': [], 'label': []}
+        for i in range(batch_size):
+            image_bytes, label_bytes = data.fetchone()
+            image_np = text_to_array(image_bytes)
+            label_np = text_to_array(label_bytes)
+            list_data['image'].append(image_np)
+            list_data['label'].append(label_np)
+
+        # Packing some images to one array
+        image_shape = list_data['image'][0].shape
+        label_shape = list_data['label'][0].shape
+        images = np.zeros(shape=(batch_size, image_shape[1], image_shape[2], image_shape[3]))
+        labels = np.zeros(shape=(batch_size, label_shape[1]))
+
+        for i in range(batch_size):
+            images[i, :, :, :] = list_data['image'][i]
+            labels[i, :] = list_data['label'][i]
+
+        return images, labels
+
+    def select_batch_img_by_index(self, table_name, img_col, id, batch_size):
+        list_id = list(range(id, batch_size+id))
+        str_list_id = ', '.join(str(x) for x in list_id)
+        command = 'select {} from {} where id in ({})'.format(img_col, table_name, str_list_id)
 
         data = self.cursor.execute(command)
 
@@ -76,9 +104,9 @@ class DatabaseNumpy:
 
         return images
 
-    def insert(self, table, id, column_name, image_np):
-        command = 'insert into {} (id, {}) values (?, ?)'.format(table, column_name)
-        self.cursor.execute(command, (id, image_np, ))
+    def insert(self, table, id, img_col, label_col, image_np, label_np):
+        command = 'insert into {} (id, {}, {}) values (?, ?, ?)'.format(table, img_col, label_col)
+        self.cursor.execute(command, (id, image_np, label_np))
         return self.cursor.lastrowid
 
     def commit(self):

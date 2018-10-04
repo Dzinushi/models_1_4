@@ -15,7 +15,7 @@ tf.app.flags.DEFINE_string('save_path', '',
 FLAGS = tf.app.flags.FLAGS
 
 
-def load_batch(dataset, batch_size, height=224, width=224):
+def load_batch(dataset, batch_size, height=224, width=224, is_training=True):
     ######################
     # Set provider train #
     ######################
@@ -26,7 +26,7 @@ def load_batch(dataset, batch_size, height=224, width=224):
         common_queue_min=10 * batch_size)
     [image, label] = provider.get(['image', 'label'])
 
-    image = inception_preprocessing.preprocess_image(image, height, width, is_training=True)
+    image = inception_preprocessing.preprocess_image(image, height, width, is_training=is_training)
 
     images, labels = tf.train.batch(
         [image, label],
@@ -43,8 +43,8 @@ def main(_):
     flowers_train = flowers.get_split(split_name='train', dataset_dir=FLAGS.path)
     flowers_validate = flowers.get_split(split_name='validation', dataset_dir=FLAGS.path)
 
-    batch_queue_train = load_batch(flowers_train, 1, height=FLAGS.height, width=FLAGS.width)
-    batch_queue_validate = load_batch(flowers_validate, 1, height=FLAGS.height, width=FLAGS.width)
+    batch_queue_train = load_batch(flowers_train, 1, height=FLAGS.height, width=FLAGS.width, is_training=True)
+    batch_queue_validate = load_batch(flowers_validate, 1, height=FLAGS.height, width=FLAGS.width, is_training=False)
 
     images_train, labels_train = batch_queue_train.dequeue()
     images_validate, labels_validate = batch_queue_validate.dequeue()
@@ -61,15 +61,19 @@ def main(_):
         # Insert images
         progbar = tf.keras.utils.Progbar(target=max_step_train)
         for step in range(max_step_train):
-            image_np = sess.run(images_train)
-            db.insert(Table.flowers_train, id=step+1, image_np=image_np)
+            image_np, labels_np = sess.run([images_train, labels_train])
+            image_np += 1
+            image_np /= 2
+            db.insert(Table.flowers_train, id=step+1, image_np=image_np, label_np=labels_np)
             progbar.update(step+1)
         db.commit()
 
         progbar = tf.keras.utils.Progbar(target=max_step_validate)
         for step in range(max_step_validate):
-            image_np = sess.run(images_validate)
-            db.insert(Table.flowers_validate, id=step+1, image_np=image_np)
+            image_np, labels_np = sess.run([images_validate, labels_validate])
+            image_np += 1
+            image_np /= 2
+            db.insert(Table.flowers_validate, id=step+1, image_np=image_np, label_np=labels_np)
             progbar.update(step+1)
         db.commit()
     db.close()

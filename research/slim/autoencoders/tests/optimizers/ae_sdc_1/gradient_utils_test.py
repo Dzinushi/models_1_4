@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from research.slim.autoencoders.optimizers.ae_sdc_1.gradient_utils import grad_w_conv_stride_1, grad_w_conv_stride_n, grad_bias_x, grad_w_fc
+from research.slim.autoencoders.optimizers.ae_sdc_1.gradient_utils import grad_w_conv_stride_1, grad_w_conv_stride_n, grad_bias_x, grad_bias_y, grad_w_fc
 from research.slim.autoencoders.optimizers.activations import d_relu_cuda, d_leakyrelu_cuda, d_sigmoid_cuda, d_tanh_cuda
 
 np.random.seed(7)
@@ -43,6 +43,13 @@ def array_normilize_one(array):
     max_value = array.max()
     for i in range(len(array)):
         array[i] = array[i] / max_value
+
+
+def round_1d(array, accuracy=3):
+    array_r = np.zeros(array.shape, dtype=np.float32)
+    for var in range(len(array)):
+        array_r[var] = round(array[var], accuracy)
+    return array_r
 
 
 def round_2d(array, accuracy=3):
@@ -795,7 +802,6 @@ class TestCustomGradientSDC1(unittest.TestCase):
 
         # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
         y0 = args._y0
-        y1 = args._y1
 
         # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
         w_shape = [2, 2, 2, 3]
@@ -805,7 +811,243 @@ class TestCustomGradientSDC1(unittest.TestCase):
 
         d_act = lambda var: 1.0
 
+        accuracy = 4
+
         grad_manual = np.zeros(3)
+        grad_manual[0] = 0.312500
+        grad_manual[1] = 0.312500
+        grad_manual[2] = 0.312500
+        grad_manual = round_1d(grad_manual, accuracy)
 
         grad = grad_bias_x(x0, x1, y0.shape, w_shape, bias_shape, stride, d_act)
-        a = 1
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
+
+    def test_grad_bias_x_golovko_relu(self):
+        args = CustomGradientSDC1Arguments_stride_1()
+
+        # x shape is (NHWQ). Our x shape is (1, 2, 2, 2)
+        x0 = args._x0
+        x1 = args._x1
+
+        # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
+        y0 = args._y0
+
+        # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
+        w_shape = [2, 2, 2, 3]
+
+        bias_shape = [3]
+        stride = 1
+
+        accuracy = 4
+
+        grad_manual = np.zeros(3, dtype=np.float32)
+        grad_manual[0] = 0.412500
+        grad_manual[1] = 0.412500
+        grad_manual[2] = 0.412500
+        grad_manual = round_1d(grad_manual, accuracy)
+
+        grad = grad_bias_x(x0, x1, y0.shape, w_shape, bias_shape, stride, d_relu_cuda)
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
+
+    def test_grad_bias_x_golovko_leakyrelu(self):
+        args = CustomGradientSDC1Arguments_stride_1()
+
+        # x shape is (NHWQ). Our x shape is (1, 2, 2, 2)
+        x0 = args._x0
+        x1 = args._x1
+
+        # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
+        y0 = args._y0
+
+        # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
+        w_shape = [2, 2, 2, 3]
+
+        bias_shape = [3]
+        stride = 1
+
+        accuracy = 4
+
+        grad_manual = np.zeros(3, dtype=np.float32)
+        grad_manual[0] = 0.392500
+        grad_manual[1] = 0.392500
+        grad_manual[2] = 0.392500
+        grad_manual = round_1d(grad_manual, accuracy)
+
+        grad = grad_bias_x(x0, x1, y0.shape, w_shape, bias_shape, stride, d_leakyrelu_cuda)
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
+
+    def test_grad_bias_x_golovko_sigmoid(self):
+        args = CustomGradientSDC1Arguments_stride_1()
+
+        # x shape is (NHWQ). Our x shape is (1, 2, 2, 2)
+        x0 = args._x0
+        x1 = args._x1
+
+        # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
+        y0 = args._y0
+
+        # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
+        w_shape = [2, 2, 2, 3]
+
+        bias_shape = [3]
+        stride = 1
+
+        accuracy = 4
+
+        grad_manual = np.zeros(3, dtype=np.float32)
+        grad_manual[0] = 0.045750
+        grad_manual[1] = 0.045750
+        grad_manual[2] = 0.045750
+        grad_manual = round_1d(grad_manual, accuracy)
+
+        grad = grad_bias_x(x0, x1, y0.shape, w_shape, bias_shape, stride, d_sigmoid_cuda)
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
+
+    def test_grad_bias_x_golovko_tanh(self):
+        args = CustomGradientSDC1Arguments_stride_1()
+
+        # x shape is (NHWQ). Our x shape is (1, 2, 2, 2)
+        x0 = args._x0
+        x1 = args._x1
+
+        # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
+        y0 = args._y0
+
+        # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
+        w_shape = [2, 2, 2, 3]
+
+        bias_shape = [3]
+        stride = 1
+
+        accuracy = 4
+
+        grad_manual = np.zeros(3, dtype=np.float32)
+        grad_manual[0] = -0.059250
+        grad_manual[1] = -0.059250
+        grad_manual[2] = -0.059250
+        grad_manual = round_1d(grad_manual, accuracy)
+
+        grad = grad_bias_x(x0, x1, y0.shape, w_shape, bias_shape, stride, d_tanh_cuda)
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
+
+    """Test function 'grad_bias_y()'"""
+
+    def test_grad_bias_y_hinton(self):
+        args = CustomGradientSDC1Arguments_stride_1()
+
+        # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
+        y0 = args._y0
+        y1 = args._y1
+
+        # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
+        w_shape = [2, 2, 2, 3]
+
+        bias_shape = [3]
+        accuracy = 4
+
+        grad_manual = np.zeros(3, dtype=np.float32)
+        grad_manual[0] = -0.108333
+        grad_manual[1] = -0.108333
+        grad_manual[2] = -0.108333
+        grad_manual = round_1d(grad_manual, accuracy)
+
+        grad = grad_bias_y(y0, y1, w_shape, bias_shape, lambda var: 1.0)
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
+
+    def test_grad_bias_y_golovko_relu(self):
+        args = CustomGradientSDC1Arguments_stride_1()
+
+        # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
+        y0 = args._y0
+        y1 = args._y1
+
+        # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
+        w_shape = [2, 2, 2, 3]
+
+        bias_shape = [3]
+        accuracy = 4
+
+        grad_manual = np.zeros(3, dtype=np.float32)
+        grad_manual[0] = -0.075000
+        grad_manual[1] = -0.075000
+        grad_manual[2] = -0.075000
+        grad_manual = round_1d(grad_manual, accuracy)
+
+        grad = grad_bias_y(y0, y1, w_shape, bias_shape, d_relu_cuda)
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
+
+    def test_grad_bias_y_golovko_leakyrelu(self):
+        args = CustomGradientSDC1Arguments_stride_1()
+
+        # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
+        y0 = args._y0
+        y1 = args._y1
+
+        # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
+        w_shape = [2, 2, 2, 3]
+
+        bias_shape = [3]
+        accuracy = 4
+
+        grad_manual = np.zeros(3, dtype=np.float32)
+        grad_manual[0] = -0.081667
+        grad_manual[1] = -0.081667
+        grad_manual[2] = -0.081667
+        grad_manual = round_1d(grad_manual, accuracy)
+
+        grad = grad_bias_y(y0, y1, w_shape, bias_shape, d_leakyrelu_cuda)
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
+
+    def test_grad_bias_y_golovko_sigmoid(self):
+        args = CustomGradientSDC1Arguments_stride_1()
+
+        # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
+        y0 = args._y0
+        y1 = args._y1
+
+        # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
+        w_shape = [2, 2, 2, 3]
+
+        bias_shape = [3]
+        accuracy = 4
+
+        grad_manual = np.zeros(3, dtype=np.float32)
+        grad_manual[0] = -0.009333
+        grad_manual[1] = -0.009333
+        grad_manual[2] = -0.009333
+        grad_manual = round_1d(grad_manual, accuracy)
+
+        grad = grad_bias_y(y0, y1, w_shape, bias_shape, d_sigmoid_cuda)
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
+
+    def test_grad_bias_y_golovko_tanh(self):
+        args = CustomGradientSDC1Arguments_stride_1()
+
+        # y shape is (NHWK). Our y shape is (1, 1, 1, 3)
+        y0 = args._y0
+        y1 = args._y1
+
+        # w_shape is (HWQK). Our shape is (2, 2, 2, 3)
+        w_shape = [2, 2, 2, 3]
+
+        bias_shape = [3]
+        accuracy = 4
+
+        grad_manual = np.zeros(3, dtype=np.float32)
+        grad_manual[0] = -0.116000
+        grad_manual[1] = -0.116000
+        grad_manual[2] = -0.116000
+        grad_manual = round_1d(grad_manual, accuracy)
+
+        grad = grad_bias_y(y0, y1, w_shape, bias_shape, d_tanh_cuda)
+        grad_round = round_1d(grad, accuracy=accuracy)
+        self.assertTrue(np.equal(grad_round, grad_manual).all())
