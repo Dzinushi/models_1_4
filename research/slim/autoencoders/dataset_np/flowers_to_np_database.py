@@ -12,6 +12,9 @@ tf.app.flags.DEFINE_integer('width', 28,
                             'Preprocess image width. Original width: 224')
 tf.app.flags.DEFINE_string('save_path', '',
                            'Save sqlite database by input path')
+tf.app.flags.DEFINE_bool('bipolar', False,
+                         'If True, normalize data in [-1; 1]. When False, data normalize in [0; 1]')
+
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -39,6 +42,10 @@ def load_batch(dataset, batch_size, height=224, width=224, is_training=True):
     return batch_queue
 
 
+def normalize(data):
+    return (data + 1) / 2
+
+
 def main(_):
     flowers_train = flowers.get_split(split_name='train', dataset_dir=FLAGS.path)
     flowers_validate = flowers.get_split(split_name='validation', dataset_dir=FLAGS.path)
@@ -58,21 +65,22 @@ def main(_):
     sv = tf.train.Supervisor()
     with sv.managed_session() as sess:
 
-        # Insert images
+        # Inserting training images & labels
         progbar = tf.keras.utils.Progbar(target=max_step_train)
         for step in range(max_step_train):
             image_np, labels_np = sess.run([images_train, labels_train])
-            image_np += 1
-            image_np /= 2
+            if not FLAGS.bipolar:
+                image_np = normalize(image_np)
             db.insert(Table.flowers_train, id=step+1, image_np=image_np, label_np=labels_np)
             progbar.update(step+1)
         db.commit()
 
+        # Inserting validating images & labels
         progbar = tf.keras.utils.Progbar(target=max_step_validate)
         for step in range(max_step_validate):
             image_np, labels_np = sess.run([images_validate, labels_validate])
-            image_np += 1
-            image_np /= 2
+            if not FLAGS.bipolar:
+                image_np = normalize(image_np)
             db.insert(Table.flowers_validate, id=step+1, image_np=image_np, label_np=labels_np)
             progbar.update(step+1)
         db.commit()

@@ -328,11 +328,10 @@ def main(_):
                     tf.logging.info('Autoencoder pretrained variables successfully recovered!')
 
                 for i in range(FLAGS.image_test_count):
-
                     # Get images for training
-                    images_batch = dataset.select_batch_by_index(table,
-                                                                 index=i+1,
-                                                                 batch_size=FLAGS.batch_size)
+                    images_batch = dataset.select_batch_img_by_index(table,
+                                                                     index=i + 1,
+                                                                     batch_size=FLAGS.batch_size)
 
                     # Calc custom gradient
                     x, y = sess.run([[loss_map[0]['input'], loss_map[0]['output']],

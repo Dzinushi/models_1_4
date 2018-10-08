@@ -1,15 +1,26 @@
 import numpy as np
 from time import time
 from numba import cuda, double, void, jit
+
+
 # from autoencoders.optimizers.ae_sdc_1.gradient import grad_w_conv_stride_1
 
 
-@cuda.jit(double[:, :, :, :](double[:, :, :, :]), device=True)
-def d_relu_cuda(y):
+# @cuda.jit(double[:, :, :, :](double[:, :, :, :]), device=True)
+def d_relu_np(y):
     result = np.copy(y)
     result[y > 0] = 1.0
     result[y < 0] = 0.0
     return result
+
+
+@cuda.jit(void(double[:]))
+def d_relu_cuda(y):
+    pos = cuda.grid(1)
+    if y[pos] > 0.0:
+        y[pos] = 1.0
+    else:
+        y[pos] = 0.0
 
 
 # @vectorize(["float32(float32)"], target='cuda')
@@ -30,7 +41,7 @@ def d_tanh_cuda(y):
     return 1.0 - pow(y, 2)
 
 
-d_act_dic = {'relu': d_relu_cuda,
+d_act_dic = {'relu': d_relu_np,
              'leakyrelu': d_leakyrelu_cuda,
              'sigmoid': d_sigmoid_cuda,
              'tanh': d_tanh_cuda}
@@ -51,11 +62,23 @@ def d_activation_fn(y, name):
     return result
 
 
-def grad_w_conv_stride_1(x0, x1, y0, y1, w_shape):
-    grad = np.zeros(shape=w_shape)
+@cuda.jit(void(double[:], double[:], double[:], double[:], double[:], double[:]))
+def grad_w_conv_stride_1(x0, x1, y0, y1, x_shape, y_shape, w_shape, grad):
+    """
+    x[batch][height][width][map] -> x[batch * height * width * map]
+    :param x0:
+    :param x1:
+    :param y0:
+    :param y1:
+    :param x_shape: 1d array contained shape of x0 and x1 arrays
+    :param y_shape: 1d array contained shape of x0 and x1 arrays
+    :param w_shape: 1d array contained shape of weights
+    :param grad:
+    :return:
+    """
     y_shape = y0.shape
 
-    d_act = d_relu_cuda
+    d_act = d_relu_np
 
     for m in range(w_shape[0]):
         for n in range(w_shape[1]):
@@ -85,47 +108,81 @@ def grad_w_conv_stride_1(x0, x1, y0, y1, w_shape):
     return grad
 
 
-@jit(double[:,:,:,:](double[:,:,:,:], double[:,:,:,:]))
-def multiply_gpu(a, b):
-    return a * b
+@cuda.jit(void(double[:]))
+def increment_by_one_cuda(array):
+    pos = cuda.grid(1)
+    if pos < array.size:
+        array[pos] += 1
 
 
-def multiply_cpu(a, b):
-    return a * b
+def increment_by_one(array):
+    array += 1
+    return array
+
+
+# Running activation functions in gpu mode
+def run_in_gpu_mode(array, func, threadperblock=32):
+    # Original shape
+    array_shape = array.shape
+
+    # Reshape to 1d array
+    array = array.reshape(np.prod(array_shape))
+
+    # GPU options
+    blockpergrid = (array.size + threadperblock - 1) // threadperblock
+
+    # Send array to gpu memory
+    array_in_gpu = cuda.to_device(array)
+
+    # Run function in gpu
+    func[blockpergrid, threadperblock](array_in_gpu)
+
+    # Reshape result to original shape and return to user
+    return array_in_gpu.copy_to_host().reshape(array_shape)
+
+
+def time_fn(func, array, func_act=None):
+    time_start = time()
+    if func_act is not None:
+        result = func(array, func_act)
+    else:
+        result = func(array)
+    time_end_np = time() - time_start
+    return result, time_end_np
+
+
+def run_relu():
+    array = np.random.rand(1, 28, 28, 3)
+    array_cpu, time_end_cpu = time_fn(d_relu_np, array)
+    array_gpu, time_end_gpu = time_fn(run_in_gpu_mode, array, d_relu_cuda)
+    print('Time cpu: %f' % time_end_cpu)
+    print('Time gpu: %f' % time_end_gpu)
+    print('gpu/cpu = %f' % (time_end_gpu / time_end_cpu))
 
 
 def main():
+    array_1 = np.zeros(10)
 
-    # Test grad_w_conv_stride_1 with cuda
-
-    x0 = np.random.rand(1, 28, 28, 3)
-    x1 = np.random.rand(1, 28, 28, 3)
-    y0 = np.random.rand(1, 24, 24, 32)
-    y1 = np.random.rand(1, 24, 24, 32)
-    w_shape = (5, 5, 3, 32)
-
-    # grad_w_conv_stride_1_gpu = jit(double[:,:,:,:](double[:,:,:,:],
-    #                                                double[:,:,:,:],
-    #                                                double[:,:,:,:],
-    #                                                double[:,:,:,:],
-    #                                                double[:,:,:,:]))(grad_w_conv_stride_1)
-
+    # CPU time
     time_start = time()
-    d_relu_cuda(x0)
-    # grad_w_conv_stride_1(x0, x1, y0, y1, w_shape)
-    # multiply_cpu(x0, x1)
+    array_cpu_1 = increment_by_one(array_1)
     time_end_cpu = time() - time_start
 
+    d_array_1 = cuda.to_device(array_1)
+
+    # CUDA time
     time_start = time()
-    d_leakyrelu_cuda(x0)
-    # grad_w_conv_stride_1_gpu(x0, x1, y0, y1, w_shape)
-    # multiply_gpu(x0, x1)
+    run_in_gpu_mode(d_array_1, increment_by_one_cuda)
     time_end_gpu = time() - time_start
 
+    array_gpu_1 = d_array_1.copy_to_host()
+
+    print('Array cpu: {}'.format(array_cpu_1[0:5]))
+    print('Array gpu: {}'.format(array_gpu_1[0:5]))
     print('Time cpu: %f' % time_end_cpu)
     print('Time gpu: %f' % time_end_gpu)
     print('gpu/cpu = %f' % (time_end_gpu / time_end_cpu))
 
 
 if __name__ == '__main__':
-    main()
+    run_relu()

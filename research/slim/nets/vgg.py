@@ -46,17 +46,18 @@ import tensorflow as tf
 slim = tf.contrib.slim
 
 
-def vgg_arg_scope(weight_decay=0.0005):
+def vgg_arg_scope(weight_decay=0.0005, activation=tf.nn.relu):
     """Defines the VGG arg scope.
   
     Args:
       weight_decay: The l2 regularization coefficient.
+      activation: Activation function
   
     Returns:
       An arg_scope.
     """
     with slim.arg_scope([slim.conv2d, slim.fully_connected],
-                        activation_fn=tf.nn.relu,
+                        activation_fn=activation,
                         weights_regularizer=slim.l2_regularizer(weight_decay),
                         biases_initializer=tf.zeros_initializer()):
         with slim.arg_scope([slim.conv2d], padding='SAME') as arg_sc:

@@ -229,6 +229,10 @@ tf.app.flags.DEFINE_string(
     'ae_path', None,
     'Path to autoencoder pretrained vars.')
 
+tf.app.flags.DEFINE_boolean(
+    'normalize', False,
+    'Normalize bipolar images [-1;1] to [0;1]')
+
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -499,6 +503,10 @@ def main(_):
             train_image_size = FLAGS.train_image_size or network_fn.default_image_size
 
             image = image_preprocessing_fn(image, train_image_size, train_image_size)
+
+            # Normalize image
+            if FLAGS.normalize:
+                image = tf.divide(image + 1.0, 2.0)
 
             images, labels = tf.train.batch(
                 [image, label],

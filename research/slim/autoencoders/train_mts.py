@@ -233,6 +233,9 @@ tf.app.flags.DEFINE_string(
     'ae_path', None,
     'Path to autoencoder pretrained vars.')
 
+tf.app.flags.DEFINE_float(
+    'gpu_memory_fraction', 0.8, '')
+
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -592,9 +595,13 @@ def main(_):
 
         saver = tf.train.Saver()
 
+        config = tf.ConfigProto()
+        config.gpu_options.per_process_gpu_memory_fraction = FLAGS.gpu_memory_fraction
+
         # Create session
         session = tf.train.MonitoredTrainingSession(save_summaries_secs=100000000,
-                                                    checkpoint_dir=FLAGS.train_dir)
+                                                    checkpoint_dir=FLAGS.train_dir,
+                                                    config=config)
 
         # Save block N graph
         tf.train.write_graph(get_session(session).graph, FLAGS.train_dir, 'graph.pbtxt')
